@@ -1,11 +1,11 @@
 import os
 import streamlit as st
 from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain.vectorstores import FAISS
-from langchain.chains.question_answering import load_qa_chain
-from langchain.prompts import PromptTemplate
+from google import genai
+from google.genai import types
+
+# Set the default model as requested
+DEFAULT_MODEL = "gemini-2.5-flash" 
 
 # --- Core Functions ---
 
@@ -13,109 +13,91 @@ def get_pdf_text(pdf_docs):
     """Reads all uploaded PDF files and returns a single string of text."""
     text = ""
     for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
-    return text
+        try:
+            pdf_reader = PdfReader(pdf)
+            for page in pdf_reader.pages:
+                text += page.extract_text() or " "
+        except Exception as e:
+            st.error(f"Error reading PDF {pdf.name}: {e}")
+            return None
+    return text.strip()
 
-def get_text_chunks(text):
-    """Splits the raw text into smaller, manageable chunks."""
-    # Using a large chunk size/overlap suitable for documents where context preservation is key
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=10000, chunk_overlap=1000
-    )
-    chunks = splitter.split_text(text)
-    return chunks
-
-def get_vector_store(chunks, api_key):
-    """Creates embeddings for text chunks and stores them in a FAISS vector store."""
-    if not api_key:
-        st.error("API Key is missing for embedding generation.")
-        return
-
-    # Initialize embeddings with the provided API key
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
-        google_api_key=api_key # Pass API key directly to LangChain component
-    )
-    vector_store = FAISS.from_texts(chunks, embedding=embeddings)
-    # Save the vector store locally for quick retrieval later
-    vector_store.save_local("faiss_index")
-    st.success("Embedding storage successful!")
-
-def get_conversational_chain(api_key):
-    """Loads and configures the Question-Answering chain."""
-    prompt_template = """
-    Answer the question as detailed as possible from the provided context, make sure to provide all the details.
-    If the answer is not in the provided context, just say, "answer is not available in the context", do not provide the wrong answer.\n\n
-    Context:\n {context}?\n
-    Question: \n{question}\n
-
-    Answer:
+def generate_response_from_context(context: str, question: str, api_key: str, model: str) -> str:
     """
-    # Changed model from "gemini-pro" to the default: "gemini-2.5-flash"
-    model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        google_api_key=api_key, # Pass API key directly to LangChain component
-        temperature=0.3,
+    Sends the entire document context and the user's question to the Gemini API
+    in a single request for Q&A.
+    """
+    try:
+        # Initialize client with the user's key
+        client = genai.Client(api_key=api_key)
+    except Exception as e:
+        st.error(f"Failed to initialize Gemini client: {e}")
+        return "Error: Could not initialize Gemini client."
+
+    # Define the system prompt to guide the model
+    system_instruction = (
+        "You are an expert Q&A assistant. Your task is to answer the user's question based "
+        "ONLY on the provided context, which is the text extracted from PDF documents. "
+        "If the answer cannot be found in the context, clearly state: 'The answer is not available in the provided documents.'"
+        "Maintain a helpful, professional, and detailed tone. Format your answer using markdown for readability."
     )
-    
-    prompt = PromptTemplate(
-        template=prompt_template,
-        input_variables=["context", "question"]
+
+    # Combine context and question into the user's prompt
+    full_prompt = (
+        f"CONTEXT FROM UPLOADED DOCUMENTS:\n\n---\n\n{context}\n\n---\n\n"
+        f"USER QUESTION: {question}"
     )
+
+    contents = [
+        types.Content(role="user", parts=[types.Part.from_text(text=full_prompt)])
+    ]
     
-    chain = load_qa_chain(llm=model, chain_type="stuff", prompt=prompt)
-    return chain
+    config = types.GenerateContentConfig(
+        system_instruction=[types.Part.from_text(text=system_instruction)],
+        temperature=0.3
+    )
+
+    try:
+        # Call the API
+        response = client.models.generate_content(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+        return response.text
+    except Exception as e:
+        st.error(f"Gemini API call failed. This might be because the context is too large for the model's window. Error: {e}")
+        return "Error: Gemini API call failed. Check console for details."
 
 def clear_chat_history():
-    """Clears the session state's chat history."""
+    """Clears the session state's chat history and document context."""
     st.session_state.messages = [
         {"role": "assistant", "content": "upload some pdfs and ask me a question"}
     ]
+    # Also clear the stored PDF text to start fresh
+    if "pdf_text" in st.session_state:
+        del st.session_state["pdf_text"]
 
 def user_input(user_question, api_key):
-    """Handles the user's question, performs similarity search, and calls the QA chain."""
+    """Handles the user's question by fetching context and calling the single-shot generation."""
     if not api_key:
-        st.error("API Key is missing. Please enter it in the sidebar.")
         return {"output_text": "Error: API Key not set."}
-
-    # Initialize embeddings with the provided API key for loading/searching the DB
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
-        google_api_key=api_key # Pass API key directly to LangChain component
-    )
-
-    # Load the vector store
-    if not os.path.exists("faiss_index"):
-        st.warning("Please process the PDFs first.")
-        return {"output_text": "Error: PDF documents have not been processed yet."}
-
-    new_db = FAISS.load_local(
-        "faiss_index",
-        embeddings,
-        allow_dangerous_deserialization=True
-    )
     
-    # Perform similarity search to find relevant context
-    docs = new_db.similarity_search(user_question)
-
-    # Get the conversational chain, passing the API key
-    chain = get_conversational_chain(api_key)
-
-    # Run the chain
-    response = chain(
-        {"input_documents": docs, "question": user_question},
-        return_only_outputs=True
-    )
-
-    return response
+    context = st.session_state.get("pdf_text")
+    if not context:
+        return {"output_text": "Error: PDF documents have not been processed yet. Please upload and process them first."}
+    
+    # Use the default model for Q&A
+    response_text = generate_response_from_context(context, user_question, api_key, DEFAULT_MODEL)
+    
+    # The output format is simplified since we are not using LangChain's chain output dictionary
+    return {"output_text": response_text}
 
 # --- Main Streamlit App ---
 
 def main():
     st.set_page_config(
-        page_title="Gemini PDF Chatbot",
+        page_title="Gemini PDF Chatbot (Single-Shot)",
         page_icon="🤖"
     )
 
@@ -123,8 +105,7 @@ def main():
     with st.sidebar:
         st.title("Configuration & Menu")
         
-        # API Key Input (New)
-        # Check if key is already in session state and pre-fill the input
+        # API Key Input
         default_key = st.session_state.get("gemini_api_key", "")
         api_key_input = st.text_input(
             "1. Enter your Gemini API Key:", 
@@ -146,7 +127,7 @@ def main():
             accept_multiple_files=True
         )
         
-        # Processing Button
+        # Processing Button - Now just reads and stores text
         if st.button("Submit & Process"):
             api_key = st.session_state.get("gemini_api_key")
             if not api_key:
@@ -154,16 +135,21 @@ def main():
             elif pdf_docs:
                 with st.spinner("Processing..."):
                     raw_text = get_pdf_text(pdf_docs)
-                    text_chunks = get_text_chunks(raw_text)
-                    get_vector_store(text_chunks, api_key)
+                    if raw_text:
+                        st.session_state.pdf_text = raw_text
+                        st.success(f"Successfully loaded {len(raw_text):,} characters of text into context.")
+                    else:
+                        st.error("Could not extract any text from the uploaded PDFs.")
             else:
                 st.warning("Please upload at least one PDF file.")
 
         st.markdown("---")
-        st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
+        # Clear history button is updated to also clear context
+        st.sidebar.button('Clear Chat & Context', on_click=clear_chat_history)
 
     # 2. Main Content Area (Chat Interface)
     st.title("Chat with PDF files using Gemini 🤖")
+    st.caption(f"Model used for Q&A: `{DEFAULT_MODEL}`. The full document text is passed as context.")
     
     # Initialize chat messages
     if "messages" not in st.session_state.keys():
@@ -185,23 +171,17 @@ def main():
         if st.session_state.messages[-1]["role"] != "assistant":
             api_key = st.session_state.get("gemini_api_key")
 
-            if not api_key:
-                response_text = "Please enter your Gemini API Key in the sidebar before asking a question."
-            elif not os.path.exists("faiss_index"):
-                 response_text = "Please upload and process your PDF documents first."
-            else:
-                with st.chat_message("assistant"):
-                    with st.spinner("Thinking..."):
-                        # Pass API key to user_input function
-                        response = user_input(prompt, api_key)
-                        
-                        full_response = response.get('output_text', 'An error occurred or no response was generated.')
-                        
-                        placeholder = st.empty()
-                        # Streamlit doesn't natively stream LangChain outputs this way, 
-                        # so we display the final output once available.
-                        placeholder.markdown(full_response)
-                        response_text = full_response
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    # Pass API key to user_input function
+                    response = user_input(prompt, api_key)
+                    
+                    full_response = response.get('output_text', 'An error occurred or no response was generated.')
+                    
+                    # Display the final output
+                    placeholder = st.empty()
+                    placeholder.markdown(full_response)
+                    response_text = full_response
             
             # Add assistant message to history
             if response_text is not None:
