@@ -153,40 +153,16 @@ def clear_session_state():
     st.session_state.generated_sections = {}
     st.session_state.pdf_context = ""
     st.session_state.show_full_draft = False
-    st.session_state.restored_inputs = {} # Clear restored inputs as well
+    # No need to clear restored_inputs, as we are no longer using it for restoration.
     st.rerun()
 
-def load_session_state(uploaded_file):
-    """Loads session state from an uploaded JSON file."""
-    try:
-        data = json.load(uploaded_file)
-        
-        # Restore generated sections and PDF context
-        st.session_state.generated_sections = data.get('generated_sections', {})
-        st.session_state.pdf_context = data.get('pdf_context', "")
-
-        # Restore user input values into the special 'restored_inputs' key
-        st.session_state.restored_inputs = data.get('user_inputs', {})
-
-        st.success("Session state successfully loaded! UI will refresh with saved settings.")
-        st.session_state.show_full_draft = False
-        
-        # RERUN is necessary to force widgets to read the new st.session_state.restored_inputs
-        st.rerun() 
-        
-    except Exception as e:
-        st.error(f"Failed to load session state. Please ensure the file is a valid JSON file. Error: {e}")
-
-def create_export_data(user_inputs: dict):
-    """Creates a dictionary containing all necessary data for export."""
-    export_data = {
-        "version": "1.0",
-        "description": "NJTI-TERT Policy Generator Session State",
-        "user_inputs": user_inputs,
-        "generated_sections": st.session_state.get('generated_sections', {}),
-        "pdf_context": st.session_state.get('pdf_context', "")
-    }
-    return json.dumps(export_data, indent=4)
+# --- Placeholder for Export/Import Functions (DISABLED) ---
+# The functions below were removed/disabled to restore stability:
+# def load_session_state(uploaded_file):
+#     ...
+# def create_export_data(user_inputs: dict):
+#     ...
+# -----------------------------------------------------------
 
 
 # --- Main Streamlit App ---
@@ -205,10 +181,8 @@ def main():
         st.session_state.pdf_context = ""
     if 'show_full_draft' not in st.session_state:
         st.session_state.show_full_draft = False
-    if 'restored_inputs' not in st.session_state:
-        st.session_state.restored_inputs = {}
     
-    # Define default values for widgets for clarity and restoration
+    # Define stable default values for all widgets
     DEFAULTS = {
         'agency_name': "City of Willow Creek 9-1-1 Emergency Communications Center",
         'ahj_name': "Willow Creek County Public Safety Commission",
@@ -227,9 +201,11 @@ def main():
         'on_site_safety_protocol': "Required buddy system, daily check-in/out with TERT Team Leader, and adherence to Requesting PSAP's physical security procedures."
     }
 
-    # Helper function to get the current or restored value for a key
+    # Helper function to get the current or default value
     def get_input_value(key):
-        return st.session_state.restored_inputs.get(key, DEFAULTS.get(key, '')) # Added .get(key, '') for safety
+        # This relies on the Streamlit widget reading its value from session state if it exists,
+        # or falling back to the hardcoded default.
+        return DEFAULTS.get(key, '') 
     
     # --- 1. Sidebar for Configuration and Session Management ---
     with st.sidebar:
@@ -269,19 +245,7 @@ def main():
 
         st.markdown("---")
 
-        # Session State Management (NEW)
-        st.subheader("3. Import/Export Session State")
-        
-        # Import
-        uploaded_state_file = st.file_uploader(
-            "Upload a saved session (.json):", 
-            type=['json'],
-            help="This will restore all inputs and generated sections."
-        )
-        if uploaded_state_file is not None:
-            load_session_state(uploaded_state_file)
-        
-        st.markdown("---")
+        # 🛑 IMPORT/EXPORT SECTION IS DISABLED HERE TO PREVENT HANGS 🛑
         
         # Clear Button
         if st.button('Clear All Session Data', help="Wipes all inputs, generated sections, and PDF context.", use_container_width=True):
@@ -440,12 +404,6 @@ def main():
         'on_site_safety_protocol': on_site_safety_protocol
     }
 
-    # --- CRITICAL FIX: Clear the restored inputs key after the app has drawn ---
-    # This prevents the state restoration values from causing an infinite loop on subsequent interactions.
-    if st.session_state.restored_inputs:
-        st.session_state.restored_inputs = {}
-
-
     st.markdown("---")
     # --- Step 2: Generate Policy Sections ---
     st.header("Step 2: Generate Selected Policy Section")
@@ -511,7 +469,7 @@ def main():
         
         # --- Final Actions: Download and Display Button ---
         st.subheader("Final Draft Actions")
-        col_down, col_view, col_export = st.columns(3)
+        col_down, col_view = st.columns(2) # Reduced to 2 columns
 
         with col_down:
             st.download_button(
@@ -527,17 +485,7 @@ def main():
                 st.session_state.show_full_draft = not st.session_state.show_full_draft
                 st.rerun() 
         
-        with col_export:
-            # Export (Download) Session State
-            export_data_json = create_export_data(user_inputs)
-            st.download_button(
-                label="Export Session State (JSON)",
-                data=export_data_json,
-                file_name="tert_policy_session.json",
-                mime="application/json",
-                use_container_width=True,
-                help="Saves all your inputs and generated text to a JSON file."
-            )
+        # The Export button is gone, simplifying the final actions UI.
 
         # Display the formatted policy preview if the state is set
         if st.session_state.show_full_draft:
