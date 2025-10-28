@@ -13,8 +13,8 @@ POLICY_SECTIONS = {
     "Section 2.0: Definitions and Acronyms": "Definitions and Acronyms",
     "Section 3.0: TERT Personnel Minimum Qualifications and Training": "Qualifications and Training",
     "Section 4.0: Activation and Deployment Steps": "Activation and Deployment Steps",
-    # Add future sections here:
-    # "Section 5.0: Logistics and Finance": "Logistics and Finance",
+    "Section 5.0: Logistics, Finance, and Equipment": "Logistics and Finance", # NEW
+    "Section 6.0: Safety, Wellness, and Post-Mission Review": "Safety and Review", # NEW
 }
 
 
@@ -56,28 +56,38 @@ def generate_policy_section(
     # --- Section-Specific Prompt Guidance (Ensures correct format/content) ---
     section_specific_prompt_guidance = ""
 
-    if section_title.startswith("Section 2.0"):
-        # Logic for Definitions and Acronyms
+    if section_title.startswith("Section 1.0"):
+        section_specific_prompt_guidance = """
+        For this section, you MUST define the program's Purpose (using the TERT Program Goal input), Scope (clearly defining what TERT covers and does not cover), and Authority (referencing the State Authority Reference input). Use standard policy language and separate the three components clearly with subheadings.
+        """
+    elif section_title.startswith("Section 2.0"):
         section_specific_prompt_guidance = f"""
         For this section, you MUST define all standard TERT terms (e.g., TERT, PSAP, AHJ, TERT Team Leader, TERT Liaison, EMAC) based on the APCO/NENA standard. Additionally, you MUST include definitions for the following local roles/systems provided by the user: {user_inputs.get('local_roles_to_define')}. Format the output as a clean, alphabetical Markdown definition list (e.g., **TERM**: Definition.).
         """
+    elif section_title.startswith("Section 3.0"):
+        section_specific_prompt_guidance = """
+        For this section, you MUST detail the minimum training and qualification requirements for all TERT personnel (Telecommunicators, Team Leaders, and Supervisors). You must strictly adhere to all SECTION 3.0 HARD CONSTRAINTS listed below. Ensure the local background check and additional local training requirements are clearly integrated.
+        """
     elif section_title.startswith("Section 4.0"):
-        # Logic for Activation and Deployment Steps
         section_specific_prompt_guidance = f"""
         For this section, you MUST provide a detailed, step-by-step procedure for TERT Activation and Deployment. Structure the content into three logical subsections: **I. Requesting PSAP Role**, **II. Activation Procedures**, and **III. TERT Package Requirements**.
         - Activation Procedures MUST detail the process using the Local Request Mechanism: {user_inputs.get('local_request_mechanism')}.
         - TERT Package Requirements MUST list the Essential TERT Package Items: {user_inputs.get('tert_package_items')} as provided by the Requesting PSAP.
         - Use numbered lists or clear bullet points for all procedural steps.
         """
-    elif section_title.startswith("Section 1.0"):
-        # Logic for Purpose, Scope, and Authority
-        section_specific_prompt_guidance = """
-        For this section, you MUST define the program's Purpose (using the TERT Program Goal input), Scope (clearly defining what TERT covers and does not cover), and Authority (referencing the State Authority Reference input). Use standard policy language and separate the three components clearly with subheadings.
+    elif section_title.startswith("Section 5.0"): # NEW LOGIC
+        section_specific_prompt_guidance = f"""
+        For this section, you MUST establish policies for financial management, reimbursement, and equipment. The policy MUST detail:
+        1. **Reimbursement:** Use the mechanism: {user_inputs.get('reimbursement_mechanism')}
+        2. **Per Diem/Expenses:** Detail the use of the daily limit of {user_inputs.get('daily_expense_limit')} and the required expense documentation.
+        3. **Equipment Provisioning:** Clarify who provides equipment based on: {user_inputs.get('equipment_provision')}. Use subheadings for clarity.
         """
-    elif section_title.startswith("Section 3.0"):
-        # Logic for Qualifications and Training
-        section_specific_prompt_guidance = """
-        For this section, you MUST detail the minimum training and qualification requirements for all TERT personnel (Telecommunicators, Team Leaders, and Supervisors). You must strictly adhere to all SECTION 3.0 HARD CONSTRAINTS listed below. Ensure the local background check and additional local training requirements are clearly integrated.
+    elif section_title.startswith("Section 6.0"): # NEW LOGIC
+        section_specific_prompt_guidance = f"""
+        For this section, you MUST detail all protocols for TERT member safety, wellness, and post-mission procedures. The policy MUST include:
+        1. **Safety Protocols:** Implement on-site safety using the guidance: {user_inputs.get('on_site_safety_protocol')}.
+        2. **Critical Incident Stress Management (CISM):** Detail access to CISM services using the reference: {user_inputs.get('cism_policy_reference')}.
+        3. **Post-Mission Review:** Make the TERT Deployment Review completion mandatory, to be completed within the following timeframe: {user_inputs.get('post_mission_review_requirement')}.
         """
     else:
         # Default instruction for any other section
@@ -234,7 +244,7 @@ def main():
         help="Reference the legal document that authorizes TERT deployments."
     )
     
-    # 1C. Section 2.0 Inputs (Definitions and Acronyms) - IMPLEMENTED
+    # 1C. Section 2.0 Inputs (Definitions and Acronyms)
     st.subheader("Section 2.0 Inputs: Definitions")
     local_roles_to_define = st.text_area(
         "List any key local roles or systems that need defining (e.g., 'CAD System', 'Regional Coordinator'):",
@@ -242,7 +252,7 @@ def main():
         help="Enter items separated by a semicolon or new line."
     )
 
-    # 1D. Section 3.0 Inputs (Personnel & Training) - IMPLEMENTED
+    # 1D. Section 3.0 Inputs (Personnel & Training)
     st.subheader("Section 3.0 Inputs: Personnel & Training Requirements")
     st.info("The application will hardcode the mandatory FEMA IS-144, IS-100, and IS-700 requirements.")
     
@@ -262,7 +272,7 @@ def main():
         help="Enter items separated by a semicolon or new line."
     )
 
-    # 1E. Section 4.0 Inputs (Activation and Deployment Steps) - IMPLEMENTED
+    # 1E. Section 4.0 Inputs (Activation and Deployment Steps)
     st.subheader("Section 4.0 Inputs: Activation and Deployment")
     local_request_mechanism = st.text_area(
         "Local Request Mechanism:",
@@ -273,6 +283,46 @@ def main():
         "Essential TERT Package Items (e.g., PSAP Map, Radio Channel List, Access Codes):",
         value="PSAP Floor Plan; Primary Radio Channel List; CAD System Login Protocol; Local Acronym Sheet.",
         help="List key documents/items the requesting agency must provide."
+    )
+    
+    # 1F. Section 5.0 Inputs (Logistics and Finance) - NEW INPUTS
+    st.subheader("Section 5.0 Inputs: Logistics and Finance")
+    reimbursement_mechanism = st.text_input(
+        "Primary Reimbursement Mechanism:",
+        value="Deploying agency seeks reimbursement via State TERT Program/Federal EMAC upon declaration.",
+        help="How is the deployment funding handled (EMAC, State Budget, MOU)?"
+    )
+    equipment_provision = st.text_area(
+        "Equipment Provisioning Responsibility:",
+        value="Deploying PSAP provides personal gear (laptop, headset). Receiving PSAP ensures operational radio and CAD access.",
+        help="Clarify who provides equipment."
+    )
+    daily_expense_limit = st.text_input(
+        "Daily Per Diem/Expense Limit:",
+        value="$75 per day",
+        help="Set the limit for unreimbursed expenses (e.g., meals, incidentals)."
+    )
+
+    # 1G. Section 6.0 Inputs (Safety and Wellness) - NEW INPUTS
+    st.subheader("Section 6.0 Inputs: Safety, Wellness, and Review")
+    cism_policy_reference = st.text_input(
+        "Critical Incident Stress Management (CISM) Policy Reference:",
+        value="Access provided through County Employee Assistance Program (EAP) or State CISM Team (Policy 12.3).",
+        help="The official resource for post-incident stress management."
+    )
+    post_mission_review_requirement = st.selectbox(
+        "Post-Mission Review Completion Requirement:",
+        options=[
+            "Must be submitted within 72 hours of demobilization.",
+            "Must be submitted within 7 calendar days of demobilization.",
+            "Required within 30 days of the mission end."
+        ],
+        help="Define the mandatory timeframe for the TERT Deployment Review."
+    )
+    on_site_safety_protocol = st.text_area(
+        "On-Site Safety and Security Protocols:",
+        value="Required buddy system, daily check-in/out with TERT Team Leader, and adherence to Requesting PSAP's physical security procedures.",
+        help="Specific safety rules for deployed members."
     )
 
 
@@ -286,7 +336,13 @@ def main():
         'background_check': background_check,
         'additional_training': additional_training,
         'local_request_mechanism': local_request_mechanism,
-        'tert_package_items': tert_package_items
+        'tert_package_items': tert_package_items,
+        'reimbursement_mechanism': reimbursement_mechanism, # NEW
+        'equipment_provision': equipment_provision, # NEW
+        'daily_expense_limit': daily_expense_limit, # NEW
+        'cism_policy_reference': cism_policy_reference, # NEW
+        'post_mission_review_requirement': post_mission_review_requirement, # NEW
+        'on_site_safety_protocol': on_site_safety_protocol # NEW
     }
 
     st.markdown("---")
@@ -354,7 +410,7 @@ def main():
             [f"## {title}\n\n{content}" for title, content in st.session_state.generated_sections.items()]
         )
         
-        # --- Final Actions: Download and Display Button (NEW) ---
+        # --- Final Actions: Download and Display Button ---
         st.subheader("Final Draft Actions")
         col_down, col_view = st.columns(2)
 
