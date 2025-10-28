@@ -4,7 +4,7 @@ from PyPDF2 import PdfReader
 from google import genai
 from google.genai import types
 
-# Set the default model for policy generation
+# Set the default model for policy generation (using user's choice: gemini-2.5-flash)
 POLICY_GENERATION_MODEL = "gemini-2.5-flash"
 
 # --- Policy Generation Functions ---
@@ -14,7 +14,6 @@ def get_pdf_text(pdf_docs):
     text = ""
     for pdf in pdf_docs:
         try:
-            # Note: PyPDF2 is used here, ensure it is in requirements.txt
             pdf_reader = PdfReader(pdf)
             for page in pdf_reader.pages:
                 text += page.extract_text() or " "
@@ -43,20 +42,22 @@ def generate_policy_section(
     except Exception as e:
         return f"Error: Failed to initialize Gemini client: {e}"
 
-    # --- Compliance-Focused System Instruction (Hardcoded NJTI-TERT Requirements) ---
+    # --- Compliance-Focused System Instruction (Now More Flexible and Comprehensive) ---
     system_instruction = f"""
     You are a legal policy writer and certified NJTI-TERT expert for a Public Safety Answering Point (PSAP).
     Your task is to write the complete text for the policy section titled: "{section_title}".
     The generated policy MUST be compliant with the APCO/NENA ANS 1.105.2-2015 Standard for TERT Deployment.
 
-    **HARD CONSTRAINTS (NJTI-TERT Minimum Training):**
-    1. TERT Telecommunicators MUST have successfully completed: FEMA IS-144, FEMA IS-100, and FEMA IS-700.
-    2. TERT Team Leaders MUST additionally complete: FEMA IS-200 and FEMA IS-800.
-
-    **AGENCY & LOCAL CONTEXT:**
+    **GENERAL CONSTRAINTS & CONTEXT (For all Sections):**
     - Agency Legal Name: {user_inputs.get('agency_name')}
     - Authority Having Jurisdiction (AHJ): {user_inputs.get('ahj_name')}
-    - Required Background Check: {user_inputs.get('background_check')}
+    - TERT Program Goal: {user_inputs.get('ter_program_goal')}
+    - State Authority Reference: {user_inputs.get('state_authority_reference')}
+    
+    **SECTION 3.0 SPECIFIC HARD CONSTRAINTS (If writing Section 3.0):**
+    - The policy MUST state that TERT Telecommunicators MUST have successfully completed: FEMA IS-144, FEMA IS-100, and FEMA IS-700.
+    - The policy MUST state that TERT Team Leaders MUST additionally complete: FEMA IS-200 and FEMA IS-800.
+    - Local Background Check: {user_inputs.get('background_check')}
     - Additional Required Training: {user_inputs.get('additional_training')}
 
     **OPTIONAL CONTEXT:**
@@ -154,8 +155,9 @@ def main():
 
     # --- Step 1: General Policy Inputs (Used across all sections) ---
     st.header("Step 1: General PSAP & Authority Information")
-    col1, col2 = st.columns(2)
     
+    # 1A. General Agency Info
+    col1, col2 = st.columns(2)
     with col1:
         agency_name = st.text_input(
             "Agency Legal Name (Requesting/Host PSAP):",
@@ -169,7 +171,20 @@ def main():
             help="The governing body or entity (e.g., County EMA, City Council)."
         )
 
-    # Policy details for Section 3
+    # 1B. Section 1.0 Inputs (NEW)
+    st.subheader("Section 1.0 Inputs: Purpose and Authority")
+    ter_program_goal = st.text_area(
+        "Primary Goal of Your TERT Program:",
+        value="To provide mutual aid and staffing relief to PSAPs affected by natural disasters, planned events, or critical incidents that compromise continuity of operations.",
+        help="Customize the high-level mission of your program."
+    )
+    state_authority_reference = st.text_input(
+        "State/Local Authority Reference (e.g., MOU, Statute number):",
+        value="Inter-Agency Mutual Aid Agreement (MAA-2024-001) as authorized by State Statute 48-9-904 et. seq.",
+        help="Reference the legal document that authorizes TERT deployments."
+    )
+
+    # 1C. Policy details for Section 3 (Existing)
     st.subheader("Section 3.0 Inputs: Personnel & Training Requirements")
     st.info("The application will hardcode the mandatory FEMA IS-144, IS-100, and IS-700 requirements.")
     
@@ -189,28 +204,28 @@ def main():
         help="Enter items separated by a semicolon or new line."
     )
 
-    # Package user inputs into a dictionary
+    # Package user inputs into a dictionary (Updated to include Section 1 fields)
     user_inputs = {
         'agency_name': agency_name,
         'ahj_name': ahj_name,
+        'ter_program_goal': ter_program_goal,
+        'state_authority_reference': state_authority_reference,
         'background_check': background_check,
         'additional_training': additional_training
     }
 
     st.markdown("---")
-    # --- Step 2: Generate Policy Section ---
-    st.header("Step 2: Generate Policy Section 3.0 (Qualifications and Training)")
-    
-    if st.button("Generate Policy Section 3.0"):
+    # --- Step 2: Generate Policy Sections ---
+    st.header("Step 2: Generate Policy Sections")
+
+    # Policy Section 1.0 Button (NEW)
+    if st.button("Generate Policy Section 1.0 (Purpose, Scope, Authority)", key="gen_section_1"):
         if not st.session_state.get('gemini_api_key'):
             st.error("Please enter your Gemini API Key in the sidebar to proceed.")
         else:
-            section_title = "Section 3.0: TERT Personnel Minimum Qualifications and Training"
-            
-            # Retrieve PDF context if it was successfully loaded
+            section_title = "Section 1.0: Purpose, Scope, and Authority"
             pdf_context = st.session_state.get('pdf_context', '')
             
-            # Generate the content
             generated_text = generate_policy_section(
                 section_title=section_title,
                 user_inputs=user_inputs,
@@ -218,30 +233,52 @@ def main():
                 api_key=st.session_state.gemini_api_key,
                 model=POLICY_GENERATION_MODEL
             )
-            
-            # Store the generated section
             st.session_state.generated_sections[section_title] = generated_text
             st.success(f"Policy section '{section_title}' generated successfully!")
             st.rerun() # Rerun to update the display
 
 
-    # 3. Main Content Area - Output Display
+    # Policy Section 3.0 Button (Existing, now with unique key)
+    if st.button("Generate Policy Section 3.0 (Qualifications and Training)", key="gen_section_3"):
+        if not st.session_state.get('gemini_api_key'):
+            st.error("Please enter your Gemini API Key in the sidebar to proceed.")
+        else:
+            section_title = "Section 3.0: TERT Personnel Minimum Qualifications and Training"
+            pdf_context = st.session_state.get('pdf_context', '')
+            
+            generated_text = generate_policy_section(
+                section_title=section_title,
+                user_inputs=user_inputs,
+                policy_context=pdf_context,
+                api_key=st.session_state.gemini_api_key,
+                model=POLICY_GENERATION_MODEL
+            )
+            st.session_state.generated_sections[section_title] = generated_text
+            st.success(f"Policy section '{section_title}' generated successfully!")
+            st.rerun() # Rerun to update the display
+
+
+    # 3. Main Content Area - Output Display (Refactored to use expanders)
     st.markdown("---")
     st.header("Generated Policy Sections")
     
     if st.session_state.generated_sections:
         
-        # Display the latest generated section (Section 3.0 for now)
-        section_to_display = "Section 3.0: TERT Personnel Minimum Qualifications and Training"
-        if section_to_display in st.session_state.generated_sections:
-            st.subheader(section_to_display)
-            # Use an editable text area for review and final editing
-            st.session_state.generated_sections[section_to_display] = st.text_area(
-                "Review and Edit Generated Policy Text:",
-                st.session_state.generated_sections[section_to_display],
-                height=600,
-                key="policy_edit_area"
-            )
+        # Display all generated sections in collapsible expanders
+        # Sort keys to ensure sections are displayed in numerical order (1.0, 3.0, etc.)
+        sorted_sections = sorted(st.session_state.generated_sections.keys())
+        
+        for title in sorted_sections:
+            with st.expander(title, expanded=True):
+                # Use a unique key for each text area to prevent conflicts
+                session_key = f"policy_edit_area_{title.replace(' ', '_').replace(':', '')}"
+                
+                st.session_state.generated_sections[title] = st.text_area(
+                    "Review and Edit Generated Policy Text:",
+                    st.session_state.generated_sections[title],
+                    height=400,
+                    key=session_key
+                )
         
         # Final Download Option (for all collected sections)
         full_policy_text = "\n\n---\n\n".join(
@@ -256,7 +293,7 @@ def main():
         )
         
     else:
-        st.info("No policy sections have been generated yet. Complete Step 1 and click 'Generate Policy Section 3.0' in Step 2.")
+        st.info("No policy sections have been generated yet. Complete Step 1 and use the buttons in Step 2 to generate content.")
 
 
 if __name__ == "__main__":
