@@ -7,6 +7,17 @@ from google.genai import types
 # Set the default model for policy generation (using user's choice: gemini-2.5-flash)
 POLICY_GENERATION_MODEL = "gemini-2.5-flash"
 
+# Define all available TERT policy sections for the dropdown
+POLICY_SECTIONS = {
+    "Section 1.0: Purpose, Scope, and Authority": "Purpose, Scope, and Authority",
+    "Section 2.0: Definitions and Acronyms": "Definitions and Acronyms",
+    "Section 3.0: TERT Personnel Minimum Qualifications and Training": "Qualifications and Training",
+    "Section 4.0: Activation and Deployment Steps": "Activation and Deployment Steps",
+    # Add future sections here:
+    # "Section 5.0: Logistics and Finance": "Logistics and Finance",
+}
+
+
 # --- Policy Generation Functions ---
 
 def get_pdf_text(pdf_docs):
@@ -54,11 +65,19 @@ def generate_policy_section(
     - TERT Program Goal: {user_inputs.get('ter_program_goal')}
     - State Authority Reference: {user_inputs.get('state_authority_reference')}
     
-    **SECTION 3.0 SPECIFIC HARD CONSTRAINTS (If writing Section 3.0):**
+    **SECTION 2.0 SPECIFIC CONSTRAINTS (Definitions):**
+    - Key PSAP Roles to Define: {user_inputs.get('local_roles_to_define')}
+    
+    **SECTION 3.0 SPECIFIC HARD CONSTRAINTS (Qualifications and Training):**
     - The policy MUST state that TERT Telecommunicators MUST have successfully completed: FEMA IS-144, FEMA IS-100, and FEMA IS-700.
     - The policy MUST state that TERT Team Leaders MUST additionally complete: FEMA IS-200 and FEMA IS-800.
     - Local Background Check: {user_inputs.get('background_check')}
     - Additional Required Training: {user_inputs.get('additional_training')}
+
+    **SECTION 4.0 SPECIFIC CONSTRAINTS (Activation and Deployment Steps):**
+    - Local Request Mechanism: {user_inputs.get('local_request_mechanism')}
+    - Essential TERT Package Items: {user_inputs.get('tert_package_items')}
+
 
     **OPTIONAL CONTEXT:**
     - The following text, extracted from existing local policies or agreements, should be used for context and consistency, but NEVER override the Hard Constraints:
@@ -171,7 +190,7 @@ def main():
             help="The governing body or entity (e.g., County EMA, City Council)."
         )
 
-    # 1B. Section 1.0 Inputs (NEW)
+    # 1B. Section 1.0 Inputs (Purpose and Authority)
     st.subheader("Section 1.0 Inputs: Purpose and Authority")
     ter_program_goal = st.text_area(
         "Primary Goal of Your TERT Program:",
@@ -183,8 +202,16 @@ def main():
         value="Inter-Agency Mutual Aid Agreement (MAA-2024-001) as authorized by State Statute 48-9-904 et. seq.",
         help="Reference the legal document that authorizes TERT deployments."
     )
+    
+    # 1C. Section 2.0 Inputs (Definitions and Acronyms) - NEW INPUTS
+    st.subheader("Section 2.0 Inputs: Definitions")
+    local_roles_to_define = st.text_area(
+        "List any key local roles or systems that need defining (e.g., 'CAD System', 'Regional Coordinator'):",
+        value="PSAP Manager; Communications Unit Leader (COML); Local CAD System (Fire); Local Radio System.",
+        help="Enter items separated by a semicolon or new line."
+    )
 
-    # 1C. Policy details for Section 3 (Existing)
+    # 1D. Section 3.0 Inputs (Personnel & Training) - EXISTING INPUTS
     st.subheader("Section 3.0 Inputs: Personnel & Training Requirements")
     st.info("The application will hardcode the mandatory FEMA IS-144, IS-100, and IS-700 requirements.")
     
@@ -204,78 +231,87 @@ def main():
         help="Enter items separated by a semicolon or new line."
     )
 
-    # Package user inputs into a dictionary (Updated to include Section 1 fields)
+    # 1E. Section 4.0 Inputs (Activation and Deployment Steps) - NEW INPUTS
+    st.subheader("Section 4.0 Inputs: Activation and Deployment")
+    local_request_mechanism = st.text_area(
+        "Local Request Mechanism:",
+        value="PSAP Manager contacts County EMA who then contacts the State TERT Coordinator via secure channel.",
+        help="Briefly describe the local process to initiate a request."
+    )
+    tert_package_items = st.text_area(
+        "Essential TERT Package Items (e.g., PSAP Map, Radio Channel List, Access Codes):",
+        value="PSAP Floor Plan; Primary Radio Channel List; CAD System Login Protocol; Local Acronym Sheet.",
+        help="List key documents/items the requesting agency must provide."
+    )
+
+
+    # Package all user inputs into a dictionary
     user_inputs = {
         'agency_name': agency_name,
         'ahj_name': ahj_name,
         'ter_program_goal': ter_program_goal,
         'state_authority_reference': state_authority_reference,
+        'local_roles_to_define': local_roles_to_define,
         'background_check': background_check,
-        'additional_training': additional_training
+        'additional_training': additional_training,
+        'local_request_mechanism': local_request_mechanism,
+        'tert_package_items': tert_package_items
     }
 
     st.markdown("---")
-    # --- Step 2: Generate Policy Sections ---
-    st.header("Step 2: Generate Policy Sections")
-
-    # Policy Section 1.0 Button (NEW)
-    if st.button("Generate Policy Section 1.0 (Purpose, Scope, Authority)", key="gen_section_1"):
+    # --- Step 2: Generate Policy Sections (Dropdown Refactor) ---
+    st.header("Step 2: Generate Selected Policy Section")
+    
+    # Dropdown to select the section
+    selected_section_title = st.selectbox(
+        "Choose the TERT Policy Section to Generate:",
+        options=list(POLICY_SECTIONS.keys()),
+        index=0 # Default to Section 1.0
+    )
+    
+    # Single generation button
+    if st.button(f"Generate '{selected_section_title}'", key="generate_selected_section"):
         if not st.session_state.get('gemini_api_key'):
             st.error("Please enter your Gemini API Key in the sidebar to proceed.")
         else:
-            section_title = "Section 1.0: Purpose, Scope, and Authority"
             pdf_context = st.session_state.get('pdf_context', '')
             
             generated_text = generate_policy_section(
-                section_title=section_title,
+                section_title=selected_section_title,
                 user_inputs=user_inputs,
                 policy_context=pdf_context,
                 api_key=st.session_state.gemini_api_key,
                 model=POLICY_GENERATION_MODEL
             )
-            st.session_state.generated_sections[section_title] = generated_text
-            st.success(f"Policy section '{section_title}' generated successfully!")
+            st.session_state.generated_sections[selected_section_title] = generated_text
+            st.success(f"Policy section '{selected_section_title}' generated successfully!")
             st.rerun() # Rerun to update the display
 
 
-    # Policy Section 3.0 Button (Existing, now with unique key)
-    if st.button("Generate Policy Section 3.0 (Qualifications and Training)", key="gen_section_3"):
-        if not st.session_state.get('gemini_api_key'):
-            st.error("Please enter your Gemini API Key in the sidebar to proceed.")
-        else:
-            section_title = "Section 3.0: TERT Personnel Minimum Qualifications and Training"
-            pdf_context = st.session_state.get('pdf_context', '')
-            
-            generated_text = generate_policy_section(
-                section_title=section_title,
-                user_inputs=user_inputs,
-                policy_context=pdf_context,
-                api_key=st.session_state.gemini_api_key,
-                model=POLICY_GENERATION_MODEL
-            )
-            st.session_state.generated_sections[section_title] = generated_text
-            st.success(f"Policy section '{section_title}' generated successfully!")
-            st.rerun() # Rerun to update the display
-
-
-    # 3. Main Content Area - Output Display (Refactored to use expanders)
+    # 3. Main Content Area - Output Display
     st.markdown("---")
     st.header("Generated Policy Sections")
     
     if st.session_state.generated_sections:
         
         # Display all generated sections in collapsible expanders
-        # Sort keys to ensure sections are displayed in numerical order (1.0, 3.0, etc.)
+        # Sort keys to ensure sections are displayed in numerical order (1.0, 2.0, 3.0, etc.)
         sorted_sections = sorted(st.session_state.generated_sections.keys())
         
         for title in sorted_sections:
-            with st.expander(title, expanded=True):
+            # Determine if this section was the one just generated to keep it expanded
+            is_expanded = (title == selected_section_title)
+            
+            with st.expander(title, expanded=is_expanded or (title not in st.session_state.generated_sections)):
                 # Use a unique key for each text area to prevent conflicts
                 session_key = f"policy_edit_area_{title.replace(' ', '_').replace(':', '')}"
                 
+                # Check if the text is empty (e.g., if the user deleted it)
+                current_text = st.session_state.generated_sections.get(title, "Policy text empty. Regenerate or paste content here.")
+                
                 st.session_state.generated_sections[title] = st.text_area(
                     "Review and Edit Generated Policy Text:",
-                    st.session_state.generated_sections[title],
+                    current_text,
                     height=400,
                     key=session_key
                 )
@@ -293,7 +329,7 @@ def main():
         )
         
     else:
-        st.info("No policy sections have been generated yet. Complete Step 1 and use the buttons in Step 2 to generate content.")
+        st.info("No policy sections have been generated yet. Complete Step 1 and use the dropdown in Step 2 to generate content.")
 
 
 if __name__ == "__main__":
