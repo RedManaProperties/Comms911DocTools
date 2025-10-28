@@ -162,18 +162,18 @@ def load_session_state(uploaded_file):
         data = json.load(uploaded_file)
         
         # Restore generated sections and PDF context
-        if 'generated_sections' in data:
-            st.session_state.generated_sections = data['generated_sections']
-        if 'pdf_context' in data:
-            st.session_state.pdf_context = data['pdf_context']
+        st.session_state.generated_sections = data.get('generated_sections', {})
+        st.session_state.pdf_context = data.get('pdf_context', "")
 
         # Restore user input values into the special 'restored_inputs' key
-        # All form fields will read their initial value from this key upon rerun
         st.session_state.restored_inputs = data.get('user_inputs', {})
 
         st.success("Session state successfully loaded! UI will refresh with saved settings.")
         st.session_state.show_full_draft = False
-        st.rerun() # FORCES RERUN TO APPLY NEW STATE TO WIDGETS
+        
+        # RERUN is necessary to force widgets to read the new st.session_state.restored_inputs
+        st.rerun() 
+        
     except Exception as e:
         st.error(f"Failed to load session state. Please ensure the file is a valid JSON file. Error: {e}")
 
@@ -198,7 +198,7 @@ def main():
         layout="wide"
     )
 
-    # State initialization for policy sections
+    # --- Initialize Session State Keys ---
     if 'generated_sections' not in st.session_state:
         st.session_state.generated_sections = {}
     if 'pdf_context' not in st.session_state:
@@ -207,7 +207,30 @@ def main():
         st.session_state.show_full_draft = False
     if 'restored_inputs' not in st.session_state:
         st.session_state.restored_inputs = {}
+    
+    # Define default values for widgets for clarity and restoration
+    DEFAULTS = {
+        'agency_name': "City of Willow Creek 9-1-1 Emergency Communications Center",
+        'ahj_name': "Willow Creek County Public Safety Commission",
+        'ter_program_goal': "To provide mutual aid and staffing relief to PSAPs affected by natural disasters, planned events, or critical incidents that compromise continuity of operations.",
+        'state_authority_reference': "Inter-Agency Mutual Aid Agreement (MAA-2024-001) as authorized by State Statute 48-9-904 et. seq.",
+        'local_roles_to_define': "PSAP Manager; Communications Unit Leader (COML); Local CAD System (Fire); Local Radio System.",
+        'background_check': "Standard Agency Fingerprint-based Check",
+        'additional_training': "Annual NIMS Refresher; Local CAD System Certification (Level 1); 40 hours of on-the-job mentorship.",
+        'local_request_mechanism': "PSAP Manager contacts County EMA who then contacts the State TERT Coordinator via secure channel.",
+        'tert_package_items': "PSAP Floor Plan; Primary Radio Channel List; CAD System Login Protocol; Local Acronym Sheet.",
+        'reimbursement_mechanism': "Deploying agency seeks reimbursement via State TERT Program/Federal EMAC upon declaration.",
+        'equipment_provision': "Deploying PSAP provides personal gear (laptop, headset). Receiving PSAP ensures operational radio and CAD access.",
+        'daily_expense_limit': "$75 per day",
+        'cism_policy_reference': "Access provided through County Employee Assistance Program (EAP) or State CISM Team (Policy 12.3).",
+        'post_mission_review_requirement': "Must be submitted within 72 hours of demobilization.",
+        'on_site_safety_protocol': "Required buddy system, daily check-in/out with TERT Team Leader, and adherence to Requesting PSAP's physical security procedures."
+    }
 
+    # Helper function to get the current or restored value for a key
+    def get_input_value(key):
+        return st.session_state.restored_inputs.get(key, DEFAULTS.get(key, '')) # Added .get(key, '') for safety
+    
     # --- 1. Sidebar for Configuration and Session Management ---
     with st.sidebar:
         st.title("🚨 TERT Policy Config")
@@ -262,37 +285,11 @@ def main():
         
         # Clear Button
         if st.button('Clear All Session Data', help="Wipes all inputs, generated sections, and PDF context.", use_container_width=True):
-            # Clear the inputs and then rerun
-            st.session_state.restored_inputs = {}
             clear_session_state()
-            # Note: clear_session_state already calls rerun, so we don't need a second one here.
 
 
     # --- 2. Main Content Area - Input Fields ---
     st.header("Step 1: Customize Your TERT Program Inputs")
-    
-    # Define default values for widgets for clarity and restoration
-    DEFAULTS = {
-        'agency_name': "City of Willow Creek 9-1-1 Emergency Communications Center",
-        'ahj_name': "Willow Creek County Public Safety Commission",
-        'ter_program_goal': "To provide mutual aid and staffing relief to PSAPs affected by natural disasters, planned events, or critical incidents that compromise continuity of operations.",
-        'state_authority_reference': "Inter-Agency Mutual Aid Agreement (MAA-2024-001) as authorized by State Statute 48-9-904 et. seq.",
-        'local_roles_to_define': "PSAP Manager; Communications Unit Leader (COML); Local CAD System (Fire); Local Radio System.",
-        'background_check': "Standard Agency Fingerprint-based Check",
-        'additional_training': "Annual NIMS Refresher; Local CAD System Certification (Level 1); 40 hours of on-the-job mentorship.",
-        'local_request_mechanism': "PSAP Manager contacts County EMA who then contacts the State TERT Coordinator via secure channel.",
-        'tert_package_items': "PSAP Floor Plan; Primary Radio Channel List; CAD System Login Protocol; Local Acronym Sheet.",
-        'reimbursement_mechanism': "Deploying agency seeks reimbursement via State TERT Program/Federal EMAC upon declaration.",
-        'equipment_provision': "Deploying PSAP provides personal gear (laptop, headset). Receiving PSAP ensures operational radio and CAD access.",
-        'daily_expense_limit': "$75 per day",
-        'cism_policy_reference': "Access provided through County Employee Assistance Program (EAP) or State CISM Team (Policy 12.3).",
-        'post_mission_review_requirement': "Must be submitted within 72 hours of demobilization.",
-        'on_site_safety_protocol': "Required buddy system, daily check-in/out with TERT Team Leader, and adherence to Requesting PSAP's physical security procedures."
-    }
-
-    # Helper function to get the current or restored value for a key
-    def get_input_value(key):
-        return st.session_state.restored_inputs.get(key, DEFAULTS[key])
     
     # 1A. General Agency Info
     col1, col2 = st.columns(2)
@@ -341,10 +338,11 @@ def main():
     
     background_check_options = ["Standard Agency Fingerprint-based Check", "State-Level Background Check Only", "No Additional Requirements Beyond Initial Employment"]
     current_bg_check = get_input_value('background_check')
+    background_check_index = background_check_options.index(current_bg_check) if current_bg_check in background_check_options else 0
     background_check = st.selectbox(
         "Local Background Check Requirement:",
         options=background_check_options,
-        index=background_check_options.index(current_bg_check) if current_bg_check in background_check_options else 0,
+        index=background_check_index,
         help="Select your PSAP's specific policy.",
         key='background_check_input'
     )
@@ -407,10 +405,11 @@ def main():
         "Required within 30 days of the mission end."
     ]
     current_review_req = get_input_value('post_mission_review_requirement')
+    review_index = review_options.index(current_review_req) if current_review_req in review_options else 0
     post_mission_review_requirement = st.selectbox(
         "Post-Mission Review Completion Requirement:",
         options=review_options,
-        index=review_options.index(current_review_req) if current_review_req in review_options else 0,
+        index=review_index,
         help="Define the mandatory timeframe for the TERT Deployment Review.",
         key='post_mission_review_requirement_input'
     )
@@ -441,6 +440,12 @@ def main():
         'on_site_safety_protocol': on_site_safety_protocol
     }
 
+    # --- CRITICAL FIX: Clear the restored inputs key after the app has drawn ---
+    # This prevents the state restoration values from causing an infinite loop on subsequent interactions.
+    if st.session_state.restored_inputs:
+        st.session_state.restored_inputs = {}
+
+
     st.markdown("---")
     # --- Step 2: Generate Policy Sections ---
     st.header("Step 2: Generate Selected Policy Section")
@@ -450,7 +455,7 @@ def main():
         "Choose the TERT Policy Section to Generate:",
         options=list(POLICY_SECTIONS.keys()),
         index=0,
-        key='section_select_dropdown' # Use key for dropdown
+        key='section_select_dropdown'
     )
     
     # Single generation button
