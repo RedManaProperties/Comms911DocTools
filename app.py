@@ -53,7 +53,37 @@ def generate_policy_section(
     except Exception as e:
         return f"Error: Failed to initialize Gemini client: {e}"
 
-    # --- Compliance-Focused System Instruction (Now More Flexible and Comprehensive) ---
+    # --- Section-Specific Prompt Guidance (Ensures correct format/content) ---
+    section_specific_prompt_guidance = ""
+
+    if section_title.startswith("Section 2.0"):
+        # Logic for Definitions and Acronyms
+        section_specific_prompt_guidance = f"""
+        For this section, you MUST define all standard TERT terms (e.g., TERT, PSAP, AHJ, TERT Team Leader, TERT Liaison, EMAC) based on the APCO/NENA standard. Additionally, you MUST include definitions for the following local roles/systems provided by the user: {user_inputs.get('local_roles_to_define')}. Format the output as a clean, alphabetical Markdown definition list (e.g., **TERM**: Definition.).
+        """
+    elif section_title.startswith("Section 4.0"):
+        # Logic for Activation and Deployment Steps
+        section_specific_prompt_guidance = f"""
+        For this section, you MUST provide a detailed, step-by-step procedure for TERT Activation and Deployment. Structure the content into three logical subsections: **I. Requesting PSAP Role**, **II. Activation Procedures**, and **III. TERT Package Requirements**.
+        - Activation Procedures MUST detail the process using the Local Request Mechanism: {user_inputs.get('local_request_mechanism')}.
+        - TERT Package Requirements MUST list the Essential TERT Package Items: {user_inputs.get('tert_package_items')} as provided by the Requesting PSAP.
+        - Use numbered lists or clear bullet points for all procedural steps.
+        """
+    elif section_title.startswith("Section 1.0"):
+        # Logic for Purpose, Scope, and Authority
+        section_specific_prompt_guidance = """
+        For this section, you MUST define the program's Purpose (using the TERT Program Goal input), Scope (clearly defining what TERT covers and does not cover), and Authority (referencing the State Authority Reference input). Use standard policy language and separate the three components clearly with subheadings.
+        """
+    elif section_title.startswith("Section 3.0"):
+        # Logic for Qualifications and Training
+        section_specific_prompt_guidance = """
+        For this section, you MUST detail the minimum training and qualification requirements for all TERT personnel (Telecommunicators, Team Leaders, and Supervisors). You must strictly adhere to all SECTION 3.0 HARD CONSTRAINTS listed below. Ensure the local background check and additional local training requirements are clearly integrated.
+        """
+    else:
+        # Default instruction for any other section
+        section_specific_prompt_guidance = "Provide a comprehensive policy section based on all available inputs and TERT best practices."
+
+    # --- Compliance-Focused System Instruction (Final Assembly) ---
     system_instruction = f"""
     You are a legal policy writer and certified NJTI-TERT expert for a Public Safety Answering Point (PSAP).
     Your task is to write the complete text for the policy section titled: "{section_title}".
@@ -65,20 +95,16 @@ def generate_policy_section(
     - TERT Program Goal: {user_inputs.get('ter_program_goal')}
     - State Authority Reference: {user_inputs.get('state_authority_reference')}
     
-    **SECTION 2.0 SPECIFIC CONSTRAINTS (Definitions):**
-    - Key PSAP Roles to Define: {user_inputs.get('local_roles_to_define')}
-    
-    **SECTION 3.0 SPECIFIC HARD CONSTRAINTS (Qualifications and Training):**
-    - The policy MUST state that TERT Telecommunicators MUST have successfully completed: FEMA IS-144, FEMA IS-100, and FEMA IS-700.
-    - The policy MUST state that TERT Team Leaders MUST additionally complete: FEMA IS-200 and FEMA IS-800.
+    **--- SECTION-SPECIFIC GENERATION INSTRUCTIONS ---**
+    {section_specific_prompt_guidance}
+
+    **--- KEY CONSTRAINTS FOR REFERENCE (Always present for consistency) ---**
+    **SECTION 3.0 HARD CONSTRAINTS (Qualifications and Training):**
+    - TERT Telecommunicators MUST have successfully completed: FEMA IS-144, FEMA IS-100, and FEMA IS-700.
+    - TERT Team Leaders MUST additionally complete: FEMA IS-200 and FEMA IS-800.
     - Local Background Check: {user_inputs.get('background_check')}
     - Additional Required Training: {user_inputs.get('additional_training')}
-
-    **SECTION 4.0 SPECIFIC CONSTRAINTS (Activation and Deployment Steps):**
-    - Local Request Mechanism: {user_inputs.get('local_request_mechanism')}
-    - Essential TERT Package Items: {user_inputs.get('tert_package_items')}
-
-
+    
     **OPTIONAL CONTEXT:**
     - The following text, extracted from existing local policies or agreements, should be used for context and consistency, but NEVER override the Hard Constraints:
     ---
@@ -87,7 +113,7 @@ def generate_policy_section(
     
     The final output MUST be a formal, professional policy section written in clear Markdown format, suitable for inclusion in a TERT Policy Manual. Do not include any introductory or concluding remarks outside the policy text itself.
     """
-
+    
     # User Query to trigger generation
     user_query = f"Generate the full text for the policy section: {section_title} using all provided context and constraints."
     
@@ -203,7 +229,7 @@ def main():
         help="Reference the legal document that authorizes TERT deployments."
     )
     
-    # 1C. Section 2.0 Inputs (Definitions and Acronyms) - NEW INPUTS
+    # 1C. Section 2.0 Inputs (Definitions and Acronyms) - IMPLEMENTED
     st.subheader("Section 2.0 Inputs: Definitions")
     local_roles_to_define = st.text_area(
         "List any key local roles or systems that need defining (e.g., 'CAD System', 'Regional Coordinator'):",
@@ -211,7 +237,7 @@ def main():
         help="Enter items separated by a semicolon or new line."
     )
 
-    # 1D. Section 3.0 Inputs (Personnel & Training) - EXISTING INPUTS
+    # 1D. Section 3.0 Inputs (Personnel & Training) - IMPLEMENTED
     st.subheader("Section 3.0 Inputs: Personnel & Training Requirements")
     st.info("The application will hardcode the mandatory FEMA IS-144, IS-100, and IS-700 requirements.")
     
@@ -231,7 +257,7 @@ def main():
         help="Enter items separated by a semicolon or new line."
     )
 
-    # 1E. Section 4.0 Inputs (Activation and Deployment Steps) - NEW INPUTS
+    # 1E. Section 4.0 Inputs (Activation and Deployment Steps) - IMPLEMENTED
     st.subheader("Section 4.0 Inputs: Activation and Deployment")
     local_request_mechanism = st.text_area(
         "Local Request Mechanism:",
