@@ -151,6 +151,10 @@ def main():
     # State initialization for policy sections
     if 'generated_sections' not in st.session_state:
         st.session_state.generated_sections = {}
+    
+    # State for policy preview (to control the expander state)
+    if 'show_full_draft' not in st.session_state:
+        st.session_state.show_full_draft = False
 
     # 1. Sidebar for Configuration and PDF Upload
     with st.sidebar:
@@ -191,6 +195,7 @@ def main():
         if st.button('Clear All Generated Sections'):
             st.session_state.generated_sections = {}
             st.session_state.pdf_context = ""
+            st.session_state.show_full_draft = False
             st.rerun()
 
 
@@ -300,6 +305,8 @@ def main():
         if not st.session_state.get('gemini_api_key'):
             st.error("Please enter your Gemini API Key in the sidebar to proceed.")
         else:
+            # Hide the full draft preview when generating a new section
+            st.session_state.show_full_draft = False 
             pdf_context = st.session_state.get('pdf_context', '')
             
             generated_text = generate_policy_section(
@@ -342,17 +349,36 @@ def main():
                     key=session_key
                 )
         
-        # Final Download Option (for all collected sections)
+        # Calculate full policy text for both download and display
         full_policy_text = "\n\n---\n\n".join(
             [f"## {title}\n\n{content}" for title, content in st.session_state.generated_sections.items()]
         )
         
-        st.download_button(
-            label="Download Full Draft Policy (Markdown)",
-            data=full_policy_text,
-            file_name="draft_tert_policy.md",
-            mime="text/markdown"
-        )
+        # --- Final Actions: Download and Display Button (NEW) ---
+        st.subheader("Final Draft Actions")
+        col_down, col_view = st.columns(2)
+
+        with col_down:
+            st.download_button(
+                label="Download Full Draft Policy (Markdown)",
+                data=full_policy_text,
+                file_name="draft_tert_policy.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+        
+        with col_view:
+            # Use session state to toggle the preview visibility on button click
+            if st.button("Display Full Draft Policy", use_container_width=True):
+                st.session_state.show_full_draft = not st.session_state.show_full_draft
+                # Force rerun to show/hide the expander immediately
+                st.rerun() 
+
+        # Display the formatted policy preview if the state is set
+        if st.session_state.show_full_draft:
+            with st.expander("Formatted Policy Preview (Human Readable)", expanded=True):
+                st.markdown(full_policy_text)
+
         
     else:
         st.info("No policy sections have been generated yet. Complete Step 1 and use the dropdown in Step 2 to generate content.")
