@@ -153,10 +153,7 @@ def clear_session_state():
     st.session_state.generated_sections = {}
     st.session_state.pdf_context = ""
     st.session_state.show_full_draft = False
-    # Clear user inputs by setting them to empty string, Streamlit will pick up new defaults on rerun
-    st.session_state.agency_name_input = "" 
-    st.session_state.ahj_name_input = ""
-    # Rerun the app to update the UI
+    st.session_state.restored_inputs = {} # Clear restored inputs as well
     st.rerun()
 
 def load_session_state(uploaded_file):
@@ -170,14 +167,13 @@ def load_session_state(uploaded_file):
         if 'pdf_context' in data:
             st.session_state.pdf_context = data['pdf_context']
 
-        # Restore user input values (using a consistent key name for st.session_state)
-        # This uses direct state setting for elements that lack specific keys (like selectbox, text_area)
-        # For simplicity and to ensure Streamlit picks them up, we'll store them in a temporary global state
+        # Restore user input values into the special 'restored_inputs' key
+        # All form fields will read their initial value from this key upon rerun
         st.session_state.restored_inputs = data.get('user_inputs', {})
 
         st.success("Session state successfully loaded! UI will refresh with saved settings.")
         st.session_state.show_full_draft = False
-        st.rerun()
+        st.rerun() # FORCES RERUN TO APPLY NEW STATE TO WIDGETS
     except Exception as e:
         st.error(f"Failed to load session state. Please ensure the file is a valid JSON file. Error: {e}")
 
@@ -266,26 +262,51 @@ def main():
         
         # Clear Button
         if st.button('Clear All Session Data', help="Wipes all inputs, generated sections, and PDF context.", use_container_width=True):
+            # Clear the inputs and then rerun
+            st.session_state.restored_inputs = {}
             clear_session_state()
-            st.rerun()
+            # Note: clear_session_state already calls rerun, so we don't need a second one here.
 
 
     # --- 2. Main Content Area - Input Fields ---
     st.header("Step 1: Customize Your TERT Program Inputs")
+    
+    # Define default values for widgets for clarity and restoration
+    DEFAULTS = {
+        'agency_name': "City of Willow Creek 9-1-1 Emergency Communications Center",
+        'ahj_name': "Willow Creek County Public Safety Commission",
+        'ter_program_goal': "To provide mutual aid and staffing relief to PSAPs affected by natural disasters, planned events, or critical incidents that compromise continuity of operations.",
+        'state_authority_reference': "Inter-Agency Mutual Aid Agreement (MAA-2024-001) as authorized by State Statute 48-9-904 et. seq.",
+        'local_roles_to_define': "PSAP Manager; Communications Unit Leader (COML); Local CAD System (Fire); Local Radio System.",
+        'background_check': "Standard Agency Fingerprint-based Check",
+        'additional_training': "Annual NIMS Refresher; Local CAD System Certification (Level 1); 40 hours of on-the-job mentorship.",
+        'local_request_mechanism': "PSAP Manager contacts County EMA who then contacts the State TERT Coordinator via secure channel.",
+        'tert_package_items': "PSAP Floor Plan; Primary Radio Channel List; CAD System Login Protocol; Local Acronym Sheet.",
+        'reimbursement_mechanism': "Deploying agency seeks reimbursement via State TERT Program/Federal EMAC upon declaration.",
+        'equipment_provision': "Deploying PSAP provides personal gear (laptop, headset). Receiving PSAP ensures operational radio and CAD access.",
+        'daily_expense_limit': "$75 per day",
+        'cism_policy_reference': "Access provided through County Employee Assistance Program (EAP) or State CISM Team (Policy 12.3).",
+        'post_mission_review_requirement': "Must be submitted within 72 hours of demobilization.",
+        'on_site_safety_protocol': "Required buddy system, daily check-in/out with TERT Team Leader, and adherence to Requesting PSAP's physical security procedures."
+    }
+
+    # Helper function to get the current or restored value for a key
+    def get_input_value(key):
+        return st.session_state.restored_inputs.get(key, DEFAULTS[key])
     
     # 1A. General Agency Info
     col1, col2 = st.columns(2)
     with col1:
         agency_name = st.text_input(
             "Agency Legal Name (Requesting/Host PSAP):",
-            value=st.session_state.restored_inputs.get('agency_name', "City of Willow Creek 9-1-1 Emergency Communications Center"),
+            value=get_input_value('agency_name'),
             help="The legal name of your center.",
             key='agency_name_input'
         )
     with col2:
         ahj_name = st.text_input(
             "Authority Having Jurisdiction (AHJ) Name:",
-            value=st.session_state.restored_inputs.get('ahj_name', "Willow Creek County Public Safety Commission"),
+            value=get_input_value('ahj_name'),
             help="The governing body or entity (e.g., County EMA, City Council).",
             key='ahj_name_input'
         )
@@ -294,21 +315,24 @@ def main():
     st.subheader("Section 1.0 Inputs: Purpose and Authority")
     ter_program_goal = st.text_area(
         "Primary Goal of Your TERT Program:",
-        value=st.session_state.restored_inputs.get('ter_program_goal', "To provide mutual aid and staffing relief to PSAPs affected by natural disasters, planned events, or critical incidents that compromise continuity of operations."),
-        help="Customize the high-level mission of your program."
+        value=get_input_value('ter_program_goal'),
+        help="Customize the high-level mission of your program.",
+        key='ter_program_goal_input'
     )
     state_authority_reference = st.text_input(
         "State/Local Authority Reference (e.g., MOU, Statute number):",
-        value=st.session_state.restored_inputs.get('state_authority_reference', "Inter-Agency Mutual Aid Agreement (MAA-2024-001) as authorized by State Statute 48-9-904 et. seq."),
-        help="Reference the legal document that authorizes TERT deployments."
+        value=get_input_value('state_authority_reference'),
+        help="Reference the legal document that authorizes TERT deployments.",
+        key='state_authority_reference_input'
     )
     
     # 1C. Section 2.0 Inputs (Definitions and Acronyms)
     st.subheader("Section 2.0 Inputs: Definitions")
     local_roles_to_define = st.text_area(
         "List any key local roles or systems that need defining (e.g., 'CAD System', 'Regional Coordinator'):",
-        value=st.session_state.restored_inputs.get('local_roles_to_define', "PSAP Manager; Communications Unit Leader (COML); Local CAD System (Fire); Local Radio System."),
-        help="Enter items separated by a semicolon or new line."
+        value=get_input_value('local_roles_to_define'),
+        help="Enter items separated by a semicolon or new line.",
+        key='local_roles_to_define_input'
     )
 
     # 1D. Section 3.0 Inputs (Personnel & Training)
@@ -316,57 +340,65 @@ def main():
     st.info("The application will hardcode the mandatory FEMA IS-144, IS-100, and IS-700 requirements.")
     
     background_check_options = ["Standard Agency Fingerprint-based Check", "State-Level Background Check Only", "No Additional Requirements Beyond Initial Employment"]
-    current_bg_check = st.session_state.restored_inputs.get('background_check', background_check_options[0])
+    current_bg_check = get_input_value('background_check')
     background_check = st.selectbox(
         "Local Background Check Requirement:",
         options=background_check_options,
         index=background_check_options.index(current_bg_check) if current_bg_check in background_check_options else 0,
-        help="Select your PSAP's specific policy."
+        help="Select your PSAP's specific policy.",
+        key='background_check_input'
     )
     
     additional_training = st.text_area(
         "List any additional *local* training requirements (e.g., PSAP-specific CAD/Radio certification):",
-        value=st.session_state.restored_inputs.get('additional_training', "Annual NIMS Refresher; Local CAD System Certification (Level 1); 40 hours of on-the-job mentorship."),
-        help="Enter items separated by a semicolon or new line."
+        value=get_input_value('additional_training'),
+        help="Enter items separated by a semicolon or new line.",
+        key='additional_training_input'
     )
 
     # 1E. Section 4.0 Inputs (Activation and Deployment Steps)
     st.subheader("Section 4.0 Inputs: Activation and Deployment")
     local_request_mechanism = st.text_area(
         "Local Request Mechanism:",
-        value=st.session_state.restored_inputs.get('local_request_mechanism', "PSAP Manager contacts County EMA who then contacts the State TERT Coordinator via secure channel."),
-        help="Briefly describe the local process to initiate a request."
+        value=get_input_value('local_request_mechanism'),
+        help="Briefly describe the local process to initiate a request.",
+        key='local_request_mechanism_input'
     )
     tert_package_items = st.text_area(
         "Essential TERT Package Items (e.g., PSAP Map, Radio Channel List, Access Codes):",
-        value=st.session_state.restored_inputs.get('tert_package_items', "PSAP Floor Plan; Primary Radio Channel List; CAD System Login Protocol; Local Acronym Sheet."),
-        help="List key documents/items the requesting agency must provide."
+        value=get_input_value('tert_package_items'),
+        help="List key documents/items the requesting agency must provide.",
+        key='tert_package_items_input'
     )
     
     # 1F. Section 5.0 Inputs (Logistics and Finance)
     st.subheader("Section 5.0 Inputs: Logistics and Finance")
     reimbursement_mechanism = st.text_input(
         "Primary Reimbursement Mechanism:",
-        value=st.session_state.restored_inputs.get('reimbursement_mechanism', "Deploying agency seeks reimbursement via State TERT Program/Federal EMAC upon declaration."),
-        help="How is the deployment funding handled (EMAC, State Budget, MOU)?"
+        value=get_input_value('reimbursement_mechanism'),
+        help="How is the deployment funding handled (EMAC, State Budget, MOU)?",
+        key='reimbursement_mechanism_input'
     )
     equipment_provision = st.text_area(
         "Equipment Provisioning Responsibility:",
-        value=st.session_state.restored_inputs.get('equipment_provision', "Deploying PSAP provides personal gear (laptop, headset). Receiving PSAP ensures operational radio and CAD access."),
-        help="Clarify who provides equipment."
+        value=get_input_value('equipment_provision'),
+        help="Clarify who provides equipment.",
+        key='equipment_provision_input'
     )
     daily_expense_limit = st.text_input(
         "Daily Per Diem/Expense Limit:",
-        value=st.session_state.restored_inputs.get('daily_expense_limit', "$75 per day"),
-        help="Set the limit for unreimbursed expenses (e.g., meals, incidentals)."
+        value=get_input_value('daily_expense_limit'),
+        help="Set the limit for unreimbursed expenses (e.g., meals, incidentals).",
+        key='daily_expense_limit_input'
     )
 
     # 1G. Section 6.0 Inputs (Safety and Wellness)
     st.subheader("Section 6.0 Inputs: Safety, Wellness, and Review")
     cism_policy_reference = st.text_input(
         "Critical Incident Stress Management (CISM) Policy Reference:",
-        value=st.session_state.restored_inputs.get('cism_policy_reference', "Access provided through County Employee Assistance Program (EAP) or State CISM Team (Policy 12.3)."),
-        help="The official resource for post-incident stress management."
+        value=get_input_value('cism_policy_reference'),
+        help="The official resource for post-incident stress management.",
+        key='cism_policy_reference_input'
     )
     
     review_options = [
@@ -374,21 +406,23 @@ def main():
         "Must be submitted within 7 calendar days of demobilization.",
         "Required within 30 days of the mission end."
     ]
-    current_review_req = st.session_state.restored_inputs.get('post_mission_review_requirement', review_options[0])
+    current_review_req = get_input_value('post_mission_review_requirement')
     post_mission_review_requirement = st.selectbox(
         "Post-Mission Review Completion Requirement:",
         options=review_options,
         index=review_options.index(current_review_req) if current_review_req in review_options else 0,
-        help="Define the mandatory timeframe for the TERT Deployment Review."
+        help="Define the mandatory timeframe for the TERT Deployment Review.",
+        key='post_mission_review_requirement_input'
     )
     on_site_safety_protocol = st.text_area(
         "On-Site Safety and Security Protocols:",
-        value=st.session_state.restored_inputs.get('on_site_safety_protocol', "Required buddy system, daily check-in/out with TERT Team Leader, and adherence to Requesting PSAP's physical security procedures."),
-        help="Specific safety rules for deployed members."
+        value=get_input_value('on_site_safety_protocol'),
+        help="Specific safety rules for deployed members.",
+        key='on_site_safety_protocol_input'
     )
 
 
-    # Package all user inputs into a dictionary
+    # Package all user inputs into a dictionary (Read from current Streamlit session state keys where applicable)
     user_inputs = {
         'agency_name': agency_name,
         'ahj_name': ahj_name,
@@ -415,7 +449,8 @@ def main():
     selected_section_title = st.selectbox(
         "Choose the TERT Policy Section to Generate:",
         options=list(POLICY_SECTIONS.keys()),
-        index=0 # Default to Section 1.0
+        index=0,
+        key='section_select_dropdown' # Use key for dropdown
     )
     
     # Single generation button
@@ -448,6 +483,7 @@ def main():
         sorted_sections = sorted(st.session_state.generated_sections.keys())
         
         for title in sorted_sections:
+            # Determine if this section was the one just generated to keep it expanded
             is_expanded = (title == selected_section_title)
             
             with st.expander(title, expanded=is_expanded or (title not in st.session_state.generated_sections)):
@@ -456,7 +492,6 @@ def main():
                 
                 current_text = st.session_state.generated_sections.get(title, "Policy text empty. Regenerate or paste content here.")
                 
-                # Check for state restoration/update and use the current text if keys don't exist
                 st.session_state.generated_sections[title] = st.text_area(
                     "Review and Edit Generated Policy Text:",
                     current_text,
