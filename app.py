@@ -1,8 +1,11 @@
 import os
 import streamlit as st
+import json
+import base64
 from PyPDF2 import PdfReader
 from google import genai
 from google.genai import types
+from io import BytesIO
 
 # Set the default model for policy generation (using user's choice: gemini-2.5-flash)
 POLICY_GENERATION_MODEL = "gemini-2.5-flash"
@@ -13,12 +16,12 @@ POLICY_SECTIONS = {
     "Section 2.0: Definitions and Acronyms": "Definitions and Acronyms",
     "Section 3.0: TERT Personnel Minimum Qualifications and Training": "Qualifications and Training",
     "Section 4.0: Activation and Deployment Steps": "Activation and Deployment Steps",
-    "Section 5.0: Logistics, Finance, and Equipment": "Logistics and Finance", # NEW
-    "Section 6.0: Safety, Wellness, and Post-Mission Review": "Safety and Review", # NEW
+    "Section 5.0: Logistics, Finance, and Equipment": "Logistics and Finance", 
+    "Section 6.0: Safety, Wellness, and Post-Mission Review": "Safety and Review", 
 }
 
 
-# --- Policy Generation Functions ---
+# --- Core Functions ---
 
 def get_pdf_text(pdf_docs):
     """Reads all uploaded PDF files and returns a single string of text."""
@@ -42,13 +45,11 @@ def generate_policy_section(
 ) -> str:
     """
     Generates a TERT policy section using Gemini, ensuring compliance with NJTI-TERT standards.
-    The policy_context can include text from uploaded documents.
     """
     if not api_key:
         return "Error: Gemini API Key is missing. Please enter it in the sidebar."
 
     try:
-        # Initialize client with the user's key
         client = genai.Client(api_key=api_key)
     except Exception as e:
         return f"Error: Failed to initialize Gemini client: {e}"
@@ -75,14 +76,14 @@ def generate_policy_section(
         - TERT Package Requirements MUST list the Essential TERT Package Items: {user_inputs.get('tert_package_items')} as provided by the Requesting PSAP.
         - Use numbered lists or clear bullet points for all procedural steps.
         """
-    elif section_title.startswith("Section 5.0"): # NEW LOGIC
+    elif section_title.startswith("Section 5.0"):
         section_specific_prompt_guidance = f"""
         For this section, you MUST establish policies for financial management, reimbursement, and equipment. The policy MUST detail:
         1. **Reimbursement:** Use the mechanism: {user_inputs.get('reimbursement_mechanism')}
         2. **Per Diem/Expenses:** Detail the use of the daily limit of {user_inputs.get('daily_expense_limit')} and the required expense documentation.
         3. **Equipment Provisioning:** Clarify who provides equipment based on: {user_inputs.get('equipment_provision')}. Use subheadings for clarity.
         """
-    elif section_title.startswith("Section 6.0"): # NEW LOGIC
+    elif section_title.startswith("Section 6.0"):
         section_specific_prompt_guidance = f"""
         For this section, you MUST detail all protocols for TERT member safety, wellness, and post-mission procedures. The policy MUST include:
         1. **Safety Protocols:** Implement on-site safety using the guidance: {user_inputs.get('on_site_safety_protocol')}.
@@ -90,7 +91,6 @@ def generate_policy_section(
         3. **Post-Mission Review:** Make the TERT Deployment Review completion mandatory, to be completed within the following timeframe: {user_inputs.get('post_mission_review_requirement')}.
         """
     else:
-        # Default instruction for any other section
         section_specific_prompt_guidance = "Provide a comprehensive policy section based on all available inputs and TERT best practices."
 
     # --- Compliance-Focused System Instruction (Final Assembly) ---
@@ -124,7 +124,6 @@ def generate_policy_section(
     The final output MUST be a formal, professional policy section written in clear Markdown format, suitable for inclusion in a TERT Policy Manual. Do not include any introductory or concluding remarks outside the policy text itself.
     """
     
-    # User Query to trigger generation
     user_query = f"Generate the full text for the policy section: {section_title} using all provided context and constraints."
     
     contents = [
@@ -133,7 +132,7 @@ def generate_policy_section(
     
     config = types.GenerateContentConfig(
         system_instruction=[types.Part.from_text(text=system_instruction)],
-        temperature=0.4 # Slightly higher temperature for policy creativity but still low for formality
+        temperature=0.4
     )
 
     try:
@@ -149,6 +148,51 @@ def generate_policy_section(
         return "Error: Failed to generate policy. Check the API key or console for details."
 
 
+def clear_session_state():
+    """Clears all dynamic session state variables."""
+    st.session_state.generated_sections = {}
+    st.session_state.pdf_context = ""
+    st.session_state.show_full_draft = False
+    # Clear user inputs by setting them to empty string, Streamlit will pick up new defaults on rerun
+    st.session_state.agency_name_input = "" 
+    st.session_state.ahj_name_input = ""
+    # Rerun the app to update the UI
+    st.rerun()
+
+def load_session_state(uploaded_file):
+    """Loads session state from an uploaded JSON file."""
+    try:
+        data = json.load(uploaded_file)
+        
+        # Restore generated sections and PDF context
+        if 'generated_sections' in data:
+            st.session_state.generated_sections = data['generated_sections']
+        if 'pdf_context' in data:
+            st.session_state.pdf_context = data['pdf_context']
+
+        # Restore user input values (using a consistent key name for st.session_state)
+        # This uses direct state setting for elements that lack specific keys (like selectbox, text_area)
+        # For simplicity and to ensure Streamlit picks them up, we'll store them in a temporary global state
+        st.session_state.restored_inputs = data.get('user_inputs', {})
+
+        st.success("Session state successfully loaded! UI will refresh with saved settings.")
+        st.session_state.show_full_draft = False
+        st.rerun()
+    except Exception as e:
+        st.error(f"Failed to load session state. Please ensure the file is a valid JSON file. Error: {e}")
+
+def create_export_data(user_inputs: dict):
+    """Creates a dictionary containing all necessary data for export."""
+    export_data = {
+        "version": "1.0",
+        "description": "NJTI-TERT Policy Generator Session State",
+        "user_inputs": user_inputs,
+        "generated_sections": st.session_state.get('generated_sections', {}),
+        "pdf_context": st.session_state.get('pdf_context', "")
+    }
+    return json.dumps(export_data, indent=4)
+
+
 # --- Main Streamlit App ---
 
 def main():
@@ -161,28 +205,31 @@ def main():
     # State initialization for policy sections
     if 'generated_sections' not in st.session_state:
         st.session_state.generated_sections = {}
-    
-    # State for policy preview (to control the expander state)
+    if 'pdf_context' not in st.session_state:
+        st.session_state.pdf_context = ""
     if 'show_full_draft' not in st.session_state:
         st.session_state.show_full_draft = False
+    if 'restored_inputs' not in st.session_state:
+        st.session_state.restored_inputs = {}
 
-    # 1. Sidebar for Configuration and PDF Upload
+    # --- 1. Sidebar for Configuration and Session Management ---
     with st.sidebar:
         st.title("🚨 TERT Policy Config")
         st.caption("Generate compliant TERT policies using Gemini and NJTI-TERT standards.")
         st.markdown("---")
 
         # API Key Input
+        st.subheader("1. Gemini API Key")
         api_key_input = st.text_input(
-            "1. Enter your Gemini API Key:",
+            "Enter your Gemini API Key:",
             type="password",
             help="Your key is not stored beyond this session."
         )
         st.session_state.gemini_api_key = api_key_input
         st.markdown("---")
         
-        # Policy Context (PDF) Upload Section
-        st.subheader("2. Optional: Local Context Documents (PDF)")
+        # PDF Upload Section
+        st.subheader("2. Optional: Local Context Documents")
         pdf_docs = st.file_uploader(
             "Upload your existing local PSAP policies or mutual aid agreements (PDFs).",
             accept_multiple_files=True
@@ -202,45 +249,57 @@ def main():
                 st.warning("No PDFs uploaded.")
 
         st.markdown("---")
-        if st.button('Clear All Generated Sections'):
-            st.session_state.generated_sections = {}
-            st.session_state.pdf_context = ""
-            st.session_state.show_full_draft = False
+
+        # Session State Management (NEW)
+        st.subheader("3. Import/Export Session State")
+        
+        # Import
+        uploaded_state_file = st.file_uploader(
+            "Upload a saved session (.json):", 
+            type=['json'],
+            help="This will restore all inputs and generated sections."
+        )
+        if uploaded_state_file is not None:
+            load_session_state(uploaded_state_file)
+        
+        st.markdown("---")
+        
+        # Clear Button
+        if st.button('Clear All Session Data', help="Wipes all inputs, generated sections, and PDF context.", use_container_width=True):
+            clear_session_state()
             st.rerun()
 
 
-    # 2. Main Content Area - Input Fields
-    st.title("NJTI-TERT Policy Generation Tool")
-    st.caption(f"Using Model: `{POLICY_GENERATION_MODEL}`. Policy sections are based on NJTI-TERT (APCO/NENA ANS 1.105.2-2015).")
-
-    # --- Step 1: General Policy Inputs (Used across all sections) ---
-    st.header("Step 1: General PSAP & Authority Information")
+    # --- 2. Main Content Area - Input Fields ---
+    st.header("Step 1: Customize Your TERT Program Inputs")
     
     # 1A. General Agency Info
     col1, col2 = st.columns(2)
     with col1:
         agency_name = st.text_input(
             "Agency Legal Name (Requesting/Host PSAP):",
-            value="City of Willow Creek 9-1-1 Emergency Communications Center",
-            help="The legal name of your center."
+            value=st.session_state.restored_inputs.get('agency_name', "City of Willow Creek 9-1-1 Emergency Communications Center"),
+            help="The legal name of your center.",
+            key='agency_name_input'
         )
     with col2:
         ahj_name = st.text_input(
             "Authority Having Jurisdiction (AHJ) Name:",
-            value="Willow Creek County Public Safety Commission",
-            help="The governing body or entity (e.g., County EMA, City Council)."
+            value=st.session_state.restored_inputs.get('ahj_name', "Willow Creek County Public Safety Commission"),
+            help="The governing body or entity (e.g., County EMA, City Council).",
+            key='ahj_name_input'
         )
 
     # 1B. Section 1.0 Inputs (Purpose and Authority)
     st.subheader("Section 1.0 Inputs: Purpose and Authority")
     ter_program_goal = st.text_area(
         "Primary Goal of Your TERT Program:",
-        value="To provide mutual aid and staffing relief to PSAPs affected by natural disasters, planned events, or critical incidents that compromise continuity of operations.",
+        value=st.session_state.restored_inputs.get('ter_program_goal', "To provide mutual aid and staffing relief to PSAPs affected by natural disasters, planned events, or critical incidents that compromise continuity of operations."),
         help="Customize the high-level mission of your program."
     )
     state_authority_reference = st.text_input(
         "State/Local Authority Reference (e.g., MOU, Statute number):",
-        value="Inter-Agency Mutual Aid Agreement (MAA-2024-001) as authorized by State Statute 48-9-904 et. seq.",
+        value=st.session_state.restored_inputs.get('state_authority_reference', "Inter-Agency Mutual Aid Agreement (MAA-2024-001) as authorized by State Statute 48-9-904 et. seq."),
         help="Reference the legal document that authorizes TERT deployments."
     )
     
@@ -248,7 +307,7 @@ def main():
     st.subheader("Section 2.0 Inputs: Definitions")
     local_roles_to_define = st.text_area(
         "List any key local roles or systems that need defining (e.g., 'CAD System', 'Regional Coordinator'):",
-        value="PSAP Manager; Communications Unit Leader (COML); Local CAD System (Fire); Local Radio System.",
+        value=st.session_state.restored_inputs.get('local_roles_to_define', "PSAP Manager; Communications Unit Leader (COML); Local CAD System (Fire); Local Radio System."),
         help="Enter items separated by a semicolon or new line."
     )
 
@@ -256,19 +315,18 @@ def main():
     st.subheader("Section 3.0 Inputs: Personnel & Training Requirements")
     st.info("The application will hardcode the mandatory FEMA IS-144, IS-100, and IS-700 requirements.")
     
+    background_check_options = ["Standard Agency Fingerprint-based Check", "State-Level Background Check Only", "No Additional Requirements Beyond Initial Employment"]
+    current_bg_check = st.session_state.restored_inputs.get('background_check', background_check_options[0])
     background_check = st.selectbox(
         "Local Background Check Requirement:",
-        options=[
-            "Standard Agency Fingerprint-based Check",
-            "State-Level Background Check Only",
-            "No Additional Requirements Beyond Initial Employment"
-        ],
+        options=background_check_options,
+        index=background_check_options.index(current_bg_check) if current_bg_check in background_check_options else 0,
         help="Select your PSAP's specific policy."
     )
     
     additional_training = st.text_area(
         "List any additional *local* training requirements (e.g., PSAP-specific CAD/Radio certification):",
-        value="Annual NIMS Refresher; Local CAD System Certification (Level 1); 40 hours of on-the-job mentorship.",
+        value=st.session_state.restored_inputs.get('additional_training', "Annual NIMS Refresher; Local CAD System Certification (Level 1); 40 hours of on-the-job mentorship."),
         help="Enter items separated by a semicolon or new line."
     )
 
@@ -276,52 +334,56 @@ def main():
     st.subheader("Section 4.0 Inputs: Activation and Deployment")
     local_request_mechanism = st.text_area(
         "Local Request Mechanism:",
-        value="PSAP Manager contacts County EMA who then contacts the State TERT Coordinator via secure channel.",
+        value=st.session_state.restored_inputs.get('local_request_mechanism', "PSAP Manager contacts County EMA who then contacts the State TERT Coordinator via secure channel."),
         help="Briefly describe the local process to initiate a request."
     )
     tert_package_items = st.text_area(
         "Essential TERT Package Items (e.g., PSAP Map, Radio Channel List, Access Codes):",
-        value="PSAP Floor Plan; Primary Radio Channel List; CAD System Login Protocol; Local Acronym Sheet.",
+        value=st.session_state.restored_inputs.get('tert_package_items', "PSAP Floor Plan; Primary Radio Channel List; CAD System Login Protocol; Local Acronym Sheet."),
         help="List key documents/items the requesting agency must provide."
     )
     
-    # 1F. Section 5.0 Inputs (Logistics and Finance) - NEW INPUTS
+    # 1F. Section 5.0 Inputs (Logistics and Finance)
     st.subheader("Section 5.0 Inputs: Logistics and Finance")
     reimbursement_mechanism = st.text_input(
         "Primary Reimbursement Mechanism:",
-        value="Deploying agency seeks reimbursement via State TERT Program/Federal EMAC upon declaration.",
+        value=st.session_state.restored_inputs.get('reimbursement_mechanism', "Deploying agency seeks reimbursement via State TERT Program/Federal EMAC upon declaration."),
         help="How is the deployment funding handled (EMAC, State Budget, MOU)?"
     )
     equipment_provision = st.text_area(
         "Equipment Provisioning Responsibility:",
-        value="Deploying PSAP provides personal gear (laptop, headset). Receiving PSAP ensures operational radio and CAD access.",
+        value=st.session_state.restored_inputs.get('equipment_provision', "Deploying PSAP provides personal gear (laptop, headset). Receiving PSAP ensures operational radio and CAD access."),
         help="Clarify who provides equipment."
     )
     daily_expense_limit = st.text_input(
         "Daily Per Diem/Expense Limit:",
-        value="$75 per day",
+        value=st.session_state.restored_inputs.get('daily_expense_limit', "$75 per day"),
         help="Set the limit for unreimbursed expenses (e.g., meals, incidentals)."
     )
 
-    # 1G. Section 6.0 Inputs (Safety and Wellness) - NEW INPUTS
+    # 1G. Section 6.0 Inputs (Safety and Wellness)
     st.subheader("Section 6.0 Inputs: Safety, Wellness, and Review")
     cism_policy_reference = st.text_input(
         "Critical Incident Stress Management (CISM) Policy Reference:",
-        value="Access provided through County Employee Assistance Program (EAP) or State CISM Team (Policy 12.3).",
+        value=st.session_state.restored_inputs.get('cism_policy_reference', "Access provided through County Employee Assistance Program (EAP) or State CISM Team (Policy 12.3)."),
         help="The official resource for post-incident stress management."
     )
+    
+    review_options = [
+        "Must be submitted within 72 hours of demobilization.",
+        "Must be submitted within 7 calendar days of demobilization.",
+        "Required within 30 days of the mission end."
+    ]
+    current_review_req = st.session_state.restored_inputs.get('post_mission_review_requirement', review_options[0])
     post_mission_review_requirement = st.selectbox(
         "Post-Mission Review Completion Requirement:",
-        options=[
-            "Must be submitted within 72 hours of demobilization.",
-            "Must be submitted within 7 calendar days of demobilization.",
-            "Required within 30 days of the mission end."
-        ],
+        options=review_options,
+        index=review_options.index(current_review_req) if current_review_req in review_options else 0,
         help="Define the mandatory timeframe for the TERT Deployment Review."
     )
     on_site_safety_protocol = st.text_area(
         "On-Site Safety and Security Protocols:",
-        value="Required buddy system, daily check-in/out with TERT Team Leader, and adherence to Requesting PSAP's physical security procedures.",
+        value=st.session_state.restored_inputs.get('on_site_safety_protocol', "Required buddy system, daily check-in/out with TERT Team Leader, and adherence to Requesting PSAP's physical security procedures."),
         help="Specific safety rules for deployed members."
     )
 
@@ -337,16 +399,16 @@ def main():
         'additional_training': additional_training,
         'local_request_mechanism': local_request_mechanism,
         'tert_package_items': tert_package_items,
-        'reimbursement_mechanism': reimbursement_mechanism, # NEW
-        'equipment_provision': equipment_provision, # NEW
-        'daily_expense_limit': daily_expense_limit, # NEW
-        'cism_policy_reference': cism_policy_reference, # NEW
-        'post_mission_review_requirement': post_mission_review_requirement, # NEW
-        'on_site_safety_protocol': on_site_safety_protocol # NEW
+        'reimbursement_mechanism': reimbursement_mechanism,
+        'equipment_provision': equipment_provision,
+        'daily_expense_limit': daily_expense_limit,
+        'cism_policy_reference': cism_policy_reference,
+        'post_mission_review_requirement': post_mission_review_requirement,
+        'on_site_safety_protocol': on_site_safety_protocol
     }
 
     st.markdown("---")
-    # --- Step 2: Generate Policy Sections (Dropdown Refactor) ---
+    # --- Step 2: Generate Policy Sections ---
     st.header("Step 2: Generate Selected Policy Section")
     
     # Dropdown to select the section
@@ -357,11 +419,10 @@ def main():
     )
     
     # Single generation button
-    if st.button(f"Generate '{selected_section_title}'", key="generate_selected_section"):
+    if st.button(f"Generate '{selected_section_title}'", key="generate_selected_section", use_container_width=True):
         if not st.session_state.get('gemini_api_key'):
             st.error("Please enter your Gemini API Key in the sidebar to proceed.")
         else:
-            # Hide the full draft preview when generating a new section
             st.session_state.show_full_draft = False 
             pdf_context = st.session_state.get('pdf_context', '')
             
@@ -374,30 +435,28 @@ def main():
             )
             st.session_state.generated_sections[selected_section_title] = generated_text
             st.success(f"Policy section '{selected_section_title}' generated successfully!")
-            st.rerun() # Rerun to update the display
+            st.rerun() 
 
 
-    # 3. Main Content Area - Output Display
+    # --- 3. Main Content Area - Output Display and Actions ---
     st.markdown("---")
     st.header("Generated Policy Sections")
     
     if st.session_state.generated_sections:
         
         # Display all generated sections in collapsible expanders
-        # Sort keys to ensure sections are displayed in numerical order (1.0, 2.0, 3.0, etc.)
         sorted_sections = sorted(st.session_state.generated_sections.keys())
         
         for title in sorted_sections:
-            # Determine if this section was the one just generated to keep it expanded
             is_expanded = (title == selected_section_title)
             
             with st.expander(title, expanded=is_expanded or (title not in st.session_state.generated_sections)):
                 # Use a unique key for each text area to prevent conflicts
                 session_key = f"policy_edit_area_{title.replace(' ', '_').replace(':', '')}"
                 
-                # Check if the text is empty (e.g., if the user deleted it)
                 current_text = st.session_state.generated_sections.get(title, "Policy text empty. Regenerate or paste content here.")
                 
+                # Check for state restoration/update and use the current text if keys don't exist
                 st.session_state.generated_sections[title] = st.text_area(
                     "Review and Edit Generated Policy Text:",
                     current_text,
@@ -412,7 +471,7 @@ def main():
         
         # --- Final Actions: Download and Display Button ---
         st.subheader("Final Draft Actions")
-        col_down, col_view = st.columns(2)
+        col_down, col_view, col_export = st.columns(3)
 
         with col_down:
             st.download_button(
@@ -424,11 +483,21 @@ def main():
             )
         
         with col_view:
-            # Use session state to toggle the preview visibility on button click
             if st.button("Display Full Draft Policy", use_container_width=True):
                 st.session_state.show_full_draft = not st.session_state.show_full_draft
-                # Force rerun to show/hide the expander immediately
                 st.rerun() 
+        
+        with col_export:
+            # Export (Download) Session State
+            export_data_json = create_export_data(user_inputs)
+            st.download_button(
+                label="Export Session State (JSON)",
+                data=export_data_json,
+                file_name="tert_policy_session.json",
+                mime="application/json",
+                use_container_width=True,
+                help="Saves all your inputs and generated text to a JSON file."
+            )
 
         # Display the formatted policy preview if the state is set
         if st.session_state.show_full_draft:
