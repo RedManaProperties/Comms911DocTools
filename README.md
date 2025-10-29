@@ -1,22 +1,20 @@
 # Gemini PDF Chatbot
 
-Gemini PDF Chatbot is a Streamlit-based application that allows users to chat with a conversational AI model trained on PDF documents. The chatbot extracts information from uploaded PDF files and answers user questions based on the provided context.
-<https://gmultichat.streamlit.app/>
+Gemini PDF Chatbot is a Streamlit-based application that allows users to build 911 center policy documents. The tool extracts information from uploaded PDF files and uses user input to build policy documents.
+<https://rmp-comms911doctools.streamlit.app/>
 
-<https://github.com/kaifcoder/gemini_multipdf_chat/assets/57701861/f6a841af-a92d-4e54-a4fd-4a52117e17f6>
 
 ## Features
 
 - **PDF Upload:** Users can upload multiple PDF files.
 - **Text Extraction:** Extracts text from uploaded PDF files.
-- **Conversational AI:** Uses the Gemini conversational AI model to answer user questions.
-- **Chat Interface:** Provides a chat interface to interact with the chatbot.
+- **Conversational AI:** Uses the Gemini AI model to build policy documents.
 
 ## Getting Started
 
 If you have docker installed, you can run the application using the following command:
 
-- Obtain a Google API key and set it in the `.env` file.
+- Obtain a Google API key
 
    ```.env
    GOOGLE_API_KEY=your_api_key_here
@@ -54,7 +52,7 @@ Follow these instructions to set up and run this project on your local machine.
 1. **Clone the Repository:**
 
    ```bash
-   git clone https://github.com/your-username/gemini-pdf-chatbot.git
+   git clone https://github.com/your-username/Comms911DocTools.git
    ```
 
 2. **Install Dependencies:**
@@ -96,6 +94,7 @@ Follow these instructions to set up and run this project on your local machine.
 - langchain
 - Streamlit
 - google.generativeai
+- google.genai
 - dotenv
 
 ## Acknowledgments
