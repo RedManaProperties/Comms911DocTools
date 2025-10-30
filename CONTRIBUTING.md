@@ -1,6 +1,6 @@
-# Contributing to Gemini PDF Chatbot
+# Contributing to Comms911DocTools
 
-First off, thank you for considering contributing to Gemini PDF Chatbot! It's people like you that make this project better for everyone.
+First off, thank you for considering contributing to Comms911DocTools! It's people like you that make this project better for everyone.
 
 ## Table of Contents
 
@@ -35,7 +35,7 @@ This section guides you through submitting a bug report. Following these guideli
 
 **How Do I Submit A (Good) Bug Report?**
 
-Bugs are tracked as [GitHub issues](https://github.com/kaifcoder/gemini_multipdf_chat/issues). Create an issue and provide the following information:
+Bugs are tracked as [GitHub issues](https://github.com/RedManaProperties/Comms911DocTools/issues). Create an issue and provide the following information:
 
 - Use a clear and descriptive title
 - Describe the exact steps to reproduce the problem
@@ -133,7 +133,7 @@ Unsure where to begin contributing? You can start by looking through these begin
 
 ## Community
 
-- Join our discussions in the [Issues](https://github.com/kaifcoder/gemini_multipdf_chat/issues) section
+- Join our discussions in the [Issues]([https://github.com/kaifcoder/gemini_multipdf_chat/issues](https://github.com/RedManaProperties/Comms911DocTools/issues)) section
 - Follow the project on GitHub for updates
 - Star the repository if you find it useful!
 
@@ -143,4 +143,4 @@ If you have questions about contributing, feel free to:
 - Open an issue with the `question` label
 - Reach out to the maintainers directly
 
-Thank you for your interest in contributing to Gemini PDF Chatbot! 🚀
+Thank you for your interest in contributing to Comms911DocTools! 🚀
