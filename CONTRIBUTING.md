@@ -72,8 +72,8 @@ Unsure where to begin contributing? You can start by looking through these begin
 
 1. **Fork and Clone the Repository**
    ```bash
-   git clone https://github.com/your-username/gemini_multipdf_chat.git
-   cd gemini_multipdf_chat
+   git clone https://github.com/your-username/Comms911DocTools.git
+   cd Comms911DocTools
    ```
 
 2. **Set up Python Environment**
@@ -86,7 +86,7 @@ Unsure where to begin contributing? You can start by looking through these begin
 3. **Set up Environment Variables**
    ```bash
    cp .env.example .env
-   # Add your GOOGLE_API_KEY to the .env file
+   # Add your GOOGLE_API_KEY to the .env file (optional)
    ```
 
 4. **Run the Application**
@@ -133,7 +133,7 @@ Unsure where to begin contributing? You can start by looking through these begin
 
 ## Community
 
-- Join our discussions in the [Issues]([https://github.com/kaifcoder/gemini_multipdf_chat/issues](https://github.com/RedManaProperties/Comms911DocTools/issues)) section
+- Join our discussions in the [Issues](https://github.com/RedManaProperties/Comms911DocTools/issues) section
 - Follow the project on GitHub for updates
 - Star the repository if you find it useful!
 
