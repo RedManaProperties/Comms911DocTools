@@ -71,7 +71,13 @@ st.markdown(
     4.  **Create Key:** Click "**Create API key**" and choose to create it in a new or existing Google Cloud project.
     5.  **Save:** Your API key will be generated and displayed. **Copy this key immediately** and store it securely, as it grants access to the API and is tied to your usage limits or billing.
     
-    ***
+    ---
+    
+    **Important Data Disclaimer (Free Tier):**
+    By using the free tier key from Google AI Studio, you agree that your input and output data 
+    may be used by Google to develop and improve its models and products. If you require
+    stronger data governance or do not want your data used for this purpose, consider 
+    using the Gemini API via Google Cloud's Vertex AI platform instead.
     
     """
 )
