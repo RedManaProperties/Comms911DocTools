@@ -44,6 +44,26 @@ st.info(
     """
 )
 
+st.markdown("---")
+
+# --- Licensing and Source Code Section ---
+st.header("📄 Licensing and Source Code")
+st.markdown(
+    """
+    All tools provided in the Comms911DocTools suite are **open source** and released under the **MIT License**.
+    
+    You can contribute to the project and view the complete source code here:
+    """
+)
+st.link_button("View on GitHub", "https://github.com/RedManaProperties/Comms911DocTools", help="Link to the official GitHub repository.")
+
+# No Warranty using st.warning for visual emphasis
+st.warning(
+    """
+    **No Warranty:** The tools are provided "as is," without warranty of any kind, express or implied. Please review the full license terms on the GitHub repository.
+    """
+)
+
 # --- Coming Soon Footer ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown(
