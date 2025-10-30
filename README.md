@@ -1,6 +1,6 @@
 # Comms911DocTools
 
-Based on Gemini PDF Chatbot, Comms911DocTools is a Streamlit-based application that allows users to build 911 center policy documents. The tool extracts information from uploaded PDF files and uses user input to build policy documents.
+Based on Gemini PDF Chatbot by kaifcoder, Comms911DocTools is a Streamlit-based application that allows users to build 911 center policy documents. The tool extracts information from uploaded PDF files and uses user input to build policy documents.
 <https://rmp-comms911doctools.streamlit.app/>
 
 
