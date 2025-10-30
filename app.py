@@ -57,6 +57,25 @@ st.markdown(
 )
 st.link_button("View on GitHub", "https://github.com/RedManaProperties/Comms911DocTools", help="Link to the official GitHub repository.")
 
+st.markdown("### How to Get a Gemini API Key")
+st.markdown(
+    """
+    If you wish to integrate or experiment with Generative AI models using the Gemini API, 
+    you will need an API key. This key is used for authentication and usage tracking.
+    
+    Here are the steps to obtain one:
+
+    1.  **Sign In:** Navigate to the **Google AI Studio** website (`aistudio.google.com`) and sign in with your Google account.
+    2.  **Accept Terms:** On your first visit, review and accept the terms of service.
+    3.  **Get Key:** Look for the "**Get API key**" button in the left navigation panel or the center of the page.
+    4.  **Create Key:** Click "**Create API key**" and choose to create it in a new or existing Google Cloud project.
+    5.  **Save:** Your API key will be generated and displayed. **Copy this key immediately** and store it securely, as it grants access to the API and is tied to your usage limits or billing.
+    
+    ***
+    
+    """
+)
+
 # No Warranty using st.warning for visual emphasis
 st.warning(
     """
